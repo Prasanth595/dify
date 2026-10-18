@@ -750,8 +750,9 @@ class AdvancedChatAppGenerateTaskPipeline(GraphRuntimeStateSupport):
             err_event = QueueErrorEvent(error=ValueError(f"Run failed: {event.error}"))
             err = self._base_task_pipeline.handle_error(event=err_event, session=session, message_id=self._message_id)
 
-        yield workflow_finish_resp
         yield self._base_task_pipeline.error_to_stream_response(err)
+        # Stream subscribers stop at workflow_finished, so the error must be sent first.
+        yield workflow_finish_resp
 
     def _handle_stop_event(
         self,

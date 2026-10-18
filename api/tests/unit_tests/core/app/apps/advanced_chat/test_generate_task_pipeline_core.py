@@ -508,10 +508,11 @@ class TestAdvancedChatGenerateTaskPipeline:
         assert len(partial_success_responses) == 2
         assert isinstance(partial_success_responses[0], MessageEndStreamResponse)
         assert partial_success_responses[1] == "finish"
-        assert (
-            list(pipeline._handle_workflow_failed_event(QueueWorkflowFailedEvent(error="err", exceptions_count=1)))[0]
-            == "finish"
+        failed_responses = list(
+            pipeline._handle_workflow_failed_event(QueueWorkflowFailedEvent(error="err", exceptions_count=1))
         )
+        assert isinstance(failed_responses[0], ValueError)
+        assert failed_responses[1] == "finish"
         assert list(pipeline._handle_workflow_paused_event(QueueWorkflowPausedEvent(reasons=[], outputs={}))) == [
             "pause"
         ]
