@@ -64,6 +64,29 @@ class TestAdvancedChatGenerateResponseConverter:
 
         assert response["data"]["future_field"] == "future-value"
 
+    @pytest.mark.parametrize("followed_by_event", [None, StreamEvent.WORKFLOW_FINISHED])
+    def test_stream_full_response_preserves_followed_by_event(self, followed_by_event: StreamEvent | None) -> None:
+        def stream() -> Generator[ChatbotAppStreamResponse]:
+            yield ChatbotAppStreamResponse(
+                conversation_id="c1",
+                message_id="m1",
+                created_at=1,
+                stream_response=ErrorStreamResponse(
+                    task_id="t1",
+                    err=ValueError("boom"),
+                    followed_by_event=followed_by_event,
+                ),
+            )
+
+        converted = list(AdvancedChatAppGenerateResponseConverter.convert_stream_full_response(stream()))
+        response = converted[0]
+        assert isinstance(response, dict)
+        assert response["event"] == "error"
+        if followed_by_event is None:
+            assert "followed_by_event" not in response
+        else:
+            assert response["followed_by_event"] == followed_by_event.value
+
     def test_stream_simple_response_includes_node_events(self):
         node_start = NodeStartStreamResponse(
             task_id="t1",
