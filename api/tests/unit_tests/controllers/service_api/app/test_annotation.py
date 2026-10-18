@@ -221,10 +221,11 @@ class TestAnnotationReplyActionApi:
     def test_invalid_action_is_rejected_without_changing_settings(
         self, app: Flask, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        enable_mock = Mock()
-        disable_mock = Mock()
-        monkeypatch.setattr(AppAnnotationService, "enable_app_annotation", enable_mock)
-        monkeypatch.setattr(AppAnnotationService, "disable_app_annotation", disable_mock)
+        def fail_if_called(*_args: object, **_kwargs: object) -> None:
+            pytest.fail("invalid action must not change annotation-reply settings")
+
+        monkeypatch.setattr(AppAnnotationService, "enable_app_annotation", fail_if_called)
+        monkeypatch.setattr(AppAnnotationService, "disable_app_annotation", fail_if_called)
         api = AnnotationReplyActionApi()
         handler = unwrap(api.post)
         payload = AnnotationReplyActionPayload(
@@ -237,8 +238,6 @@ class TestAnnotationReplyActionApi:
 
         assert error.value.code == 400
         assert error.value.error_code == "invalid_action"
-        enable_mock.assert_not_called()
-        disable_mock.assert_not_called()
 
 
 class TestAnnotationReplyActionStatusApi:
