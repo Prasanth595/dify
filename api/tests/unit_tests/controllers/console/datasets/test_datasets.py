@@ -141,6 +141,16 @@ def test_delete_maps_active_indexing_to_conflict(datasets):
     assert error.value.error_code == "dataset_indexing_in_progress"
 
 
+def test_delete_reraises_unmapped_service_errors(datasets):
+    error = RuntimeError("unexpected dataset deletion failure")
+    datasets.delete_dataset.side_effect = error
+
+    with pytest.raises(RuntimeError) as raised:
+        unwrap(DatasetApi.delete)(DatasetApi(), CONTEXT, DATASET_ID)
+
+    assert raised.value is error
+
+
 def test_request_base_url_and_explicit_status_are_forwarded(app, datasets):
     datasets.api_base_url.return_value = "https://api.example/v1"
     with app.test_request_context("/", base_url="https://console.example/"):
