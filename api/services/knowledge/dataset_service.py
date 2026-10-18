@@ -77,7 +77,7 @@ from services.entities.knowledge_entities.rag_pipeline_entities import (
 )
 from services.errors.base import NoPermissionError
 from services.errors.chunk import ChildChunkDeleteIndexError, ChildChunkIndexingError
-from services.errors.dataset import DatasetNameDuplicateError
+from services.errors.dataset import DatasetIndexingInProgressError, DatasetNameDuplicateError
 from services.errors.document import DocumentIndexingError
 from services.errors.file import FileNotExistsError
 from services.feature_service import FeatureService
@@ -1257,6 +1257,9 @@ class DatasetService:
 
         DatasetService.check_dataset_permission(dataset, user, session)
 
+        if DatasetService._has_active_indexing_documents(dataset_id, session):
+            raise DatasetIndexingInProgressError()
+
         dataset_was_deleted.send(dataset)
 
         # Remove any dataset API key scoped only to this knowledge base, so it cannot
@@ -1271,6 +1274,21 @@ class DatasetService:
         session.delete(dataset)
         session.commit()
         return True
+
+    @staticmethod
+    def _has_active_indexing_documents(dataset_id: str, session: Session) -> bool:
+        """Return whether a dataset has a document currently processing an indexing stage."""
+        return bool(
+            session.scalar(
+                select(
+                    exists().where(
+                        Document.dataset_id == dataset_id,
+                        Document.indexing_status.in_(DocumentService._INDEXING_STATUSES),
+                        Document.is_paused.is_not(True),
+                    )
+                )
+            )
+        )
 
     @staticmethod
     def dataset_use_check(dataset_ref: DatasetRef, session: Session) -> bool:

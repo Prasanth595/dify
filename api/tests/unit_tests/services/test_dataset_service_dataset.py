@@ -28,15 +28,16 @@ from models.dataset import (
     ExternalKnowledgeBindings,
     Pipeline,
 )
+from models.enums import IndexingStatus
 from services.enterprise import rbac_service
 from services.entities.knowledge_entities.rag_pipeline_entities import (
     IconInfo,
     RagPipelineDatasetCreateEntity,
 )
 from services.errors.base import NoPermissionError
-from services.errors.dataset import DatasetNameDuplicateError
+from services.errors.dataset import DatasetIndexingInProgressError, DatasetNameDuplicateError
 from services.knowledge.dataset_service import DatasetCollectionBindingService, DatasetPermissionService, DatasetService
-from tests.unit_tests.model_factories import make_account, make_dataset, make_tenant
+from tests.unit_tests.model_factories import make_account, make_dataset, make_document, make_tenant
 
 from .dataset_service_test_helpers import (
     MagicMock,
@@ -393,6 +394,28 @@ class TestDatasetServiceRetrieval:
 
 
 class TestDatasetServiceCreationAndUpdate:
+    @pytest.mark.parametrize(
+        ("status", "is_paused", "expected"),
+        [
+            (IndexingStatus.INDEXING, False, True),
+            (IndexingStatus.PARSING, False, True),
+            (IndexingStatus.INDEXING, True, False),
+            (IndexingStatus.WAITING, False, False),
+            (IndexingStatus.COMPLETED, False, False),
+        ],
+    )
+    def test_active_indexing_query_only_matches_unpaused_in_flight_documents(
+        self, sqlite_session: Session, status: IndexingStatus, is_paused: bool, expected: bool
+    ) -> None:
+        dataset = _dataset()
+        document = make_document(dataset_id=dataset.id, tenant_id=dataset.tenant_id)
+        document.indexing_status = status
+        document.is_paused = is_paused
+        sqlite_session.add_all([dataset, document])
+        sqlite_session.commit()
+
+        assert DatasetService._has_active_indexing_documents(dataset.id, sqlite_session) is expected
+
     def test_create_empty_dataset_rejects_duplicate_name(self, sqlite_session: Session) -> None:
         sqlite_session.add(_dataset(name="Existing"))
         sqlite_session.commit()
@@ -436,6 +459,22 @@ class TestDatasetServiceCreationAndUpdate:
             assert persisted.tenant_id == "tenant-1"
             assert persisted.maintainer == "user-1"
             assert persisted.embedding_model == "default-embedding"
+
+    def test_delete_dataset_rejects_active_indexing_before_dispatching_cleanup(self, sqlite_session: Session) -> None:
+        dataset = _dataset()
+        document = make_document(dataset_id=dataset.id, tenant_id=dataset.tenant_id)
+        document.indexing_status = IndexingStatus.INDEXING
+        sqlite_session.add_all([dataset, document])
+        sqlite_session.commit()
+
+        with (
+            patch("services.knowledge.dataset_service.dataset_was_deleted.send") as dataset_was_deleted,
+            pytest.raises(DatasetIndexingInProgressError),
+        ):
+            DatasetService.delete_dataset(dataset.id, _account(), sqlite_session)
+
+        dataset_was_deleted.assert_not_called()
+        assert sqlite_session.get(Dataset, dataset.id) is not None
 
     def test_create_empty_external_dataset_persists_tenant_owned_binding(self, sqlite_session: Session) -> None:
         sqlite_session.add_all([_external_api(), _external_api(api_id="api-foreign", tenant_id="tenant-2")])

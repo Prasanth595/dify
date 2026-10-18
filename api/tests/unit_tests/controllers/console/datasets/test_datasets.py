@@ -34,6 +34,7 @@ from controllers.console.datasets.datasets import (
 )
 from controllers.console.datasets.error import (
     DatasetAccessDeniedRequestError,
+    DatasetIndexingInProgressError,
     DatasetNameDuplicateError,
     IndexingEstimateError,
 )
@@ -128,6 +129,16 @@ def test_duplicate_name_is_mapped_at_transport_on_create(datasets):
 def test_delete_success_returns_empty_204(datasets):
     assert unwrap(DatasetApi.delete)(DatasetApi(), CONTEXT, DATASET_ID) == ("", 204)
     datasets.delete_dataset.assert_called_once_with(CONTEXT, dataset_id=str(DATASET_ID))
+
+
+def test_delete_maps_active_indexing_to_conflict(datasets):
+    datasets.delete_dataset.side_effect = services.errors.dataset.DatasetIndexingInProgressError()
+
+    with pytest.raises(DatasetIndexingInProgressError) as error:
+        unwrap(DatasetApi.delete)(DatasetApi(), CONTEXT, DATASET_ID)
+
+    assert error.value.code == 409
+    assert error.value.error_code == "dataset_indexing_in_progress"
 
 
 def test_request_base_url_and_explicit_status_are_forwarded(app, datasets):
