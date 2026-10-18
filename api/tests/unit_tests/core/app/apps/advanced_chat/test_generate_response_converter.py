@@ -12,6 +12,7 @@ from core.app.entities.task_entities import (
     NodeFinishStreamResponse,
     NodeStartStreamResponse,
     PingStreamResponse,
+    StreamEvent,
 )
 from core.workflow.nodes.human_input.pause_reason import DifyHITLEventType
 from graphon.enums import WorkflowExecutionStatus, WorkflowNodeExecutionStatus
@@ -115,7 +116,11 @@ class TestAdvancedChatGenerateResponseConverter:
                 conversation_id="c1",
                 message_id="m1",
                 created_at=1,
-                stream_response=ErrorStreamResponse(task_id="t1", err=ValueError("boom")),
+                stream_response=ErrorStreamResponse(
+                    task_id="t1",
+                    err=ValueError("boom"),
+                    followed_by_event=StreamEvent.WORKFLOW_FINISHED,
+                ),
             )
             yield ChatbotAppStreamResponse(
                 conversation_id="c1",
@@ -129,3 +134,4 @@ class TestAdvancedChatGenerateResponseConverter:
         assert converted[1]["event"] == "node_started"
         assert converted[2]["event"] == "node_finished"
         assert converted[3]["event"] == "error"
+        assert converted[3]["followed_by_event"] == StreamEvent.WORKFLOW_FINISHED.value
