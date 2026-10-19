@@ -10,12 +10,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from threading import Lock, Thread, get_ident
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import event, select
+from sqlalchemy import Select, event, select
 from sqlalchemy.dialects import mysql
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import ORMExecuteState, Session, sessionmaker
 
 from core.errors.error import LLMBadRequestError, ProviderTokenNotInitError
 from core.rag.index_processor.constant.index_type import IndexTechniqueType
@@ -420,13 +421,27 @@ class TestDatasetServiceCreationAndUpdate:
 
         assert DatasetService._has_active_indexing_documents(dataset.id, sqlite_session) is expected
 
-    def test_active_indexing_query_uses_mysql_current_read(self) -> None:
-        session = MagicMock()
-        session.scalar.return_value = "active-document"
+    def test_active_indexing_query_uses_mysql_current_read(self, sqlite_session: Session) -> None:
+        dataset = _dataset()
+        document = make_document(dataset_id=dataset.id, tenant_id=dataset.tenant_id)
+        document.indexing_status = IndexingStatus.INDEXING
+        sqlite_session.add_all([dataset, document])
+        sqlite_session.commit()
 
-        assert DatasetService._has_active_indexing_documents("dataset-id", session) is True
+        statements: list[Select[tuple[str]]] = []
 
-        statement = session.scalar.call_args.args[0]
+        def capture_statement(execute_state: ORMExecuteState) -> None:
+            if execute_state.is_select:
+                statements.append(cast(Select[tuple[str]], execute_state.statement))
+
+        event.listen(sqlite_session, "do_orm_execute", capture_statement)
+        try:
+            assert DatasetService._has_active_indexing_documents(dataset.id, sqlite_session) is True
+        finally:
+            event.remove(sqlite_session, "do_orm_execute", capture_statement)
+
+        assert len(statements) == 1
+        statement = statements[0]
         sql = str(statement.compile(dialect=mysql.dialect())).upper()
         assert "FOR UPDATE" in sql
         assert "EXISTS" not in sql
