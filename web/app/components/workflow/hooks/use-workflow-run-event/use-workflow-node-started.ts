@@ -24,7 +24,7 @@ export const useWorkflowNodeStarted = () => {
       const nodes = getNodes()
       // Iteration and loop rounds share a node id but have distinct execution ids.
       const currentIndex = workflowRunningData?.tracing?.findIndex((item) => item.id === data.id)
-      if (currentIndex && currentIndex > -1) {
+      if (currentIndex !== undefined && currentIndex > -1) {
         setWorkflowRunningData(
           produce(workflowRunningData!, (draft) => {
             draft.tracing![currentIndex] = {
