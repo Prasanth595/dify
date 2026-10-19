@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from collections.abc import Sequence
 from contextlib import nullcontext
 from unittest.mock import MagicMock, Mock, create_autospec, patch
 
@@ -12,6 +13,7 @@ import tasks.duplicate_document_indexing_task as task_module
 from enums import DeploymentEdition
 from models.dataset import Dataset, Document
 from models.enums import IndexingStatus
+from services.knowledge.resource_scope import DocumentRef
 from tasks.duplicate_document_indexing_task import (
     _duplicate_document_indexing_task,
     _duplicate_document_indexing_task_with_tenant_queue,
@@ -120,7 +122,7 @@ def test_commits_parsing_status_before_duplicate_indexing_starts(
     monkeypatch.setattr(task_module, "dataset_operation_lock", lambda _dataset_id: nullcontext())
     monkeypatch.setattr(task_module.dify_config, "DEPLOYMENT_EDITION", DeploymentEdition.COMMUNITY)
 
-    def assert_status_committed(document_refs) -> None:
+    def assert_status_committed(document_refs: Sequence[DocumentRef]) -> None:
         with Session(bind=bind) as observer:
             stored_document = observer.get(Document, document.id)
             assert stored_document is not None

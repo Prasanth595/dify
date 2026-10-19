@@ -276,7 +276,7 @@ def test_upload_aborts_when_dataset_disappears_before_locked_persistence(
 
     original_lock_dataset_row = adapters_module.lock_dataset_row
 
-    def delete_before_lock(session: Session, dataset_id: str):
+    def delete_before_lock(session: Session, dataset_id: str) -> Dataset | None:
         dataset = session.get(Dataset, dataset_id)
         if dataset is not None:
             session.delete(dataset)

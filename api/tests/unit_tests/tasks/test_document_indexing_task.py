@@ -1,6 +1,7 @@
 """Regression tests for legacy document indexing admission races."""
 
 import uuid
+from collections.abc import Sequence
 from contextlib import nullcontext
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 import tasks.document_indexing_task as task_module
 from models.dataset import Dataset, Document
 from models.enums import IndexingStatus
+from services.knowledge.resource_scope import DocumentRef
 from tests.unit_tests.model_factories import make_dataset, make_document
 
 
@@ -61,7 +63,7 @@ def test_commits_parsing_status_before_starting_legacy_indexing(
     )
     monkeypatch.setattr(task_module, "dataset_operation_lock", lambda _dataset_id: nullcontext())
 
-    def assert_status_committed(document_refs) -> None:
+    def assert_status_committed(document_refs: Sequence[DocumentRef]) -> None:
         with Session(bind=bind) as observer:
             stored_document = observer.get(Document, document.id)
             assert stored_document is not None
