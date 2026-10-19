@@ -21,6 +21,7 @@ from tasks.duplicate_document_indexing_task import (
     normal_duplicate_document_indexing_task,
     priority_duplicate_document_indexing_task,
 )
+from tests.unit_tests.config_override import config_overrides_context
 from tests.unit_tests.model_factories import make_dataset, make_document
 
 
@@ -87,9 +88,8 @@ def test_skips_duplicate_indexing_when_dataset_is_deleted_before_locked_admissio
     )
     monkeypatch.setattr(task_module, "dataset_operation_lock", lambda _dataset_id: nullcontext())
     monkeypatch.setattr(task_module, "lock_dataset_row", lambda _session, _dataset_id: None)
-    monkeypatch.setattr(task_module.dify_config, "DEPLOYMENT_EDITION", DeploymentEdition.COMMUNITY)
-
     with (
+        config_overrides_context(DEPLOYMENT_EDITION=DeploymentEdition.COMMUNITY),
         patch.object(task_module, "IndexProcessorFactory") as processor_factory,
         patch.object(task_module, "build_document_indexing_service") as indexing_builder,
     ):
@@ -120,7 +120,6 @@ def test_commits_parsing_status_before_duplicate_indexing_starts(
         lambda: Session(bind=bind, expire_on_commit=False),
     )
     monkeypatch.setattr(task_module, "dataset_operation_lock", lambda _dataset_id: nullcontext())
-    monkeypatch.setattr(task_module.dify_config, "DEPLOYMENT_EDITION", DeploymentEdition.COMMUNITY)
 
     def assert_status_committed(document_refs: Sequence[DocumentRef]) -> None:
         with Session(bind=bind) as observer:
@@ -130,6 +129,7 @@ def test_commits_parsing_status_before_duplicate_indexing_starts(
         assert len(document_refs) == 1
 
     with (
+        config_overrides_context(DEPLOYMENT_EDITION=DeploymentEdition.COMMUNITY),
         patch.object(task_module, "IndexProcessorFactory"),
         patch.object(task_module, "build_document_indexing_service") as runner,
     ):
