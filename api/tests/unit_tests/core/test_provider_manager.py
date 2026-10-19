@@ -713,6 +713,54 @@ def test_get_configurations_binds_manager_runtime_to_provider_configuration(mock
     provider_configuration.bind_model_runtime.assert_called_once_with(manager._model_runtime)
 
 
+def test_get_configurations_deduplicates_model_records_and_credentials_for_provider_aliases(
+    mock_provider_entity,
+) -> None:
+    manager = _build_provider_manager()
+    provider_factory = Mock()
+    mock_provider_entity.provider = "langgenius/openai/openai"
+    provider_factory.get_providers.return_value = [mock_provider_entity]
+    primary_model_record = SimpleNamespace(model_name="gpt-4o", model_type=ModelType.LLM)
+    alias_model_record = SimpleNamespace(model_name="gpt-4o", model_type=ModelType.LLM)
+    model_credential = object()
+    custom_configuration = SimpleNamespace(provider=None, models=[])
+    system_configuration = SimpleNamespace(enabled=False, quota_configurations=[], current_quota_type=None)
+
+    with (
+        patch.object(manager, "_get_all_providers", return_value={"langgenius/openai/openai": []}),
+        patch.object(manager, "_init_trial_provider_records", return_value={"langgenius/openai/openai": []}),
+        patch.object(
+            manager,
+            "_get_all_provider_models",
+            return_value={
+                "langgenius/openai/openai": [primary_model_record],
+                "openai": [alias_model_record],
+            },
+        ),
+        patch.object(manager, "_get_all_preferred_model_providers", return_value={}),
+        patch.object(manager, "_get_all_provider_model_settings", return_value={}),
+        patch.object(manager, "_get_all_provider_load_balancing_configs", return_value={}),
+        patch.object(
+            manager,
+            "_get_all_provider_model_credentials",
+            return_value={
+                "langgenius/openai/openai": [model_credential],
+                "openai": [model_credential],
+            },
+        ),
+        patch.object(manager, "_get_all_provider_credentials", return_value={}),
+        patch.object(manager, "_to_custom_configuration", return_value=custom_configuration) as to_custom_configuration,
+        patch.object(manager, "_to_system_configuration", return_value=system_configuration),
+        patch.object(manager, "_to_model_settings", return_value=[]),
+        patch("core.provider_manager.ModelProviderFactory", return_value=provider_factory),
+        patch("core.provider_manager.ProviderConfiguration"),
+    ):
+        manager.get_configurations("tenant-id")
+
+    assert to_custom_configuration.call_args.args[3] == [primary_model_record]
+    assert to_custom_configuration.call_args.args[4] == [model_credential]
+
+
 @pytest.mark.parametrize(
     ("quota_is_valid", "has_custom_provider", "has_custom_model", "expected_using_provider_type"),
     [
