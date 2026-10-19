@@ -284,20 +284,28 @@ class TestDataSourceInfoSerialization:
             assert stored_document.indexing_status == IndexingStatus.PARSING
             assert stored_document.processing_started_at is not None
 
-    def test_sync_skips_when_document_is_deleted_before_locked_lookup(
+    @pytest.mark.parametrize("deleted_resource", ["dataset", "document"])
+    def test_sync_skips_when_admission_target_is_deleted_before_locked_lookup(
         self,
         document: Document,
         sqlite_session: Session,
         monkeypatch: pytest.MonkeyPatch,
+        deleted_resource: str,
     ) -> None:
         original_lock_dataset_row = task_module.lock_dataset_row
+        dataset_id = document.dataset_id
+        document_id = document.id
 
-        def delete_document_then_lock(session: Session, dataset_id: str):
+        def delete_target_then_lock(session: Session, dataset_id: str):
             with Session(bind=sqlite_session.get_bind()) as remover, remover.begin():
-                remover.delete(remover.get(Document, document.id))
+                if deleted_resource == "dataset":
+                    remover.delete(remover.get(Document, document_id))
+                    remover.delete(remover.get(Dataset, dataset_id))
+                else:
+                    remover.delete(remover.get(Document, document_id))
             return original_lock_dataset_row(session, dataset_id)
 
-        monkeypatch.setattr(task_module, "lock_dataset_row", delete_document_then_lock)
+        monkeypatch.setattr(task_module, "lock_dataset_row", delete_target_then_lock)
         with (
             patch("tasks.document_indexing_sync_task.build_data_source_credentials") as provider_builder,
             patch("tasks.document_indexing_sync_task.NotionExtractor") as extractor_builder,
@@ -311,7 +319,7 @@ class TestDataSourceInfoSerialization:
             extractor.get_notion_last_edited_time.return_value = "2024-02-01T00:00:00Z"
             extractor_builder.return_value = extractor
 
-            document_indexing_sync_task(document.dataset_id, document.id)
+            document_indexing_sync_task(dataset_id, document_id)
 
         processor_builder.assert_not_called()
         indexing_builder.return_value.run.assert_not_called()

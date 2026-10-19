@@ -99,6 +99,43 @@ def test_skips_duplicate_indexing_when_dataset_is_deleted_before_locked_admissio
     assert document.indexing_status == IndexingStatus.WAITING
 
 
+@pytest.mark.parametrize("sqlite_session", [(Dataset, Document)], indirect=True)
+def test_commits_parsing_status_before_duplicate_indexing_starts(
+    sqlite_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant_id = str(uuid.uuid4())
+    dataset = make_dataset(dataset_id=str(uuid.uuid4()), tenant_id=tenant_id)
+    document = make_document(dataset_id=dataset.id, tenant_id=tenant_id)
+    document.indexing_status = IndexingStatus.WAITING
+    sqlite_session.add_all([dataset, document])
+    sqlite_session.commit()
+    bind = sqlite_session.get_bind()
+
+    monkeypatch.setattr(
+        task_module.session_factory,
+        "create_session",
+        lambda: Session(bind=bind, expire_on_commit=False),
+    )
+    monkeypatch.setattr(task_module, "dataset_operation_lock", lambda _dataset_id: nullcontext())
+    monkeypatch.setattr(task_module.dify_config, "DEPLOYMENT_EDITION", DeploymentEdition.COMMUNITY)
+
+    def assert_status_committed(document_refs) -> None:
+        with Session(bind=bind) as observer:
+            stored_document = observer.get(Document, document.id)
+            assert stored_document is not None
+            assert stored_document.indexing_status == IndexingStatus.PARSING
+        assert len(document_refs) == 1
+
+    with (
+        patch.object(task_module, "IndexProcessorFactory"),
+        patch.object(task_module, "build_document_indexing_service") as runner,
+    ):
+        runner.return_value.run.side_effect = assert_status_committed
+        task_module._duplicate_document_indexing_task(dataset.id, [document.id])
+        runner.return_value.run.assert_called_once()
+
+
 class TestDuplicateDocumentIndexingTaskWithTenantQueue:
     """Tests for _duplicate_document_indexing_task_with_tenant_queue function."""
 
