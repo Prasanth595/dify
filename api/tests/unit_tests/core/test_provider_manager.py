@@ -691,24 +691,61 @@ def test_get_provider_model_bundle_raises_for_unknown_provider():
             manager.get_provider_model_bundle("tenant-id", "openai", ModelType.LLM)
 
 
-def test_get_configurations_binds_manager_runtime_to_provider_configuration(mock_provider_entity):
+def test_get_configurations_deduplicates_alias_records_and_binds_runtime(mock_provider_entity):
     manager = _build_provider_manager()
     provider_configuration = Mock()
     provider_factory = Mock()
+    mock_provider_entity.provider = "langgenius/openai/openai"
     provider_factory.get_providers.return_value = [mock_provider_entity]
     custom_configuration = SimpleNamespace(provider=None, models=[])
     system_configuration = SimpleNamespace(enabled=False, quota_configurations=[], current_quota_type=None)
+    primary_model = _ProviderModelCacheEntry(
+        id="primary",
+        provider_name="langgenius/openai/openai",
+        model_name="gpt-4o",
+        model_type=ModelType.LLM,
+        credential_id=None,
+        credential_name=None,
+        encrypted_config=None,
+    )
+    alias_model = _ProviderModelCacheEntry(
+        id="alias",
+        provider_name="openai",
+        model_name="gpt-4o",
+        model_type=ModelType.LLM,
+        credential_id=None,
+        credential_name=None,
+        encrypted_config=None,
+    )
+    model_credential = ProviderModelCredential(
+        tenant_id="tenant-id",
+        provider_name="openai",
+        model_name="gpt-4o",
+        model_type=ModelType.LLM,
+        credential_name="default",
+        encrypted_config="{}",
+    )
+    provider_settings: dict[str, list[object]] = {"langgenius/openai/openai": [], "openai": []}
+    load_balancing_configs: dict[str, list[object]] = {"langgenius/openai/openai": [], "openai": []}
 
     with (
-        patch.object(manager, "_get_all_providers", return_value={"openai": []}),
-        patch.object(manager, "_init_trial_provider_records", return_value={"openai": []}),
-        patch.object(manager, "_get_all_provider_models", return_value={"openai": []}),
+        patch.object(manager, "_get_all_providers", return_value={"langgenius/openai/openai": []}),
+        patch.object(manager, "_init_trial_provider_records", return_value={"langgenius/openai/openai": []}),
+        patch.object(
+            manager,
+            "_get_all_provider_models",
+            return_value={"langgenius/openai/openai": [primary_model], "openai": [alias_model]},
+        ),
         patch.object(manager, "_get_all_preferred_model_providers", return_value={}),
-        patch.object(manager, "_get_all_provider_model_settings", return_value={}),
-        patch.object(manager, "_get_all_provider_load_balancing_configs", return_value={}),
-        patch.object(manager, "_get_all_provider_model_credentials", return_value={}),
+        patch.object(manager, "_get_all_provider_model_settings", return_value=provider_settings),
+        patch.object(manager, "_get_all_provider_load_balancing_configs", return_value=load_balancing_configs),
+        patch.object(
+            manager,
+            "_get_all_provider_model_credentials",
+            return_value={"langgenius/openai/openai": [model_credential], "openai": [model_credential]},
+        ),
         patch.object(manager, "_get_all_provider_credentials", return_value={}),
-        patch.object(manager, "_to_custom_configuration", return_value=custom_configuration),
+        patch.object(manager, "_to_custom_configuration", return_value=custom_configuration) as to_custom_configuration,
         patch.object(manager, "_to_system_configuration", return_value=system_configuration),
         patch.object(manager, "_to_model_settings", return_value=[]),
         patch("core.provider_manager.ModelProviderFactory", return_value=provider_factory),
@@ -717,6 +754,8 @@ def test_get_configurations_binds_manager_runtime_to_provider_configuration(mock
         manager.get_configurations("tenant-id")
 
     provider_configuration.bind_model_runtime.assert_called_once_with(manager._model_runtime)
+    assert to_custom_configuration.call_args.args[3] == [primary_model]
+    assert to_custom_configuration.call_args.args[4] == [model_credential]
 
 
 def test_append_unique_provider_models_deduplicates_model_name_and_type() -> None:
