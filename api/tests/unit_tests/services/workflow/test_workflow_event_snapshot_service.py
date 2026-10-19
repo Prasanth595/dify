@@ -325,6 +325,8 @@ def _persist_human_input_form(
     recipients: Sequence[HumanInputFormRecipient] = (),
     form_id: str = "form-1",
     status: HumanInputFormStatus = HumanInputFormStatus.WAITING,
+    rendered_content: str = "content",
+    default_values: Mapping[str, Any] | None = None,
 ) -> datetime:
     expiration_time = datetime(2024, 1, 1)
     form = HumanInputForm(
@@ -334,8 +336,14 @@ def _persist_human_input_form(
         workflow_run_id="run-1",
         conversation_id=None,
         node_id="node-1",
-        form_definition='{"display_in_ui": true}',
-        rendered_content="content",
+        form_definition=json.dumps(
+            {
+                "display_in_ui": True,
+                "rendered_content": rendered_content,
+                "default_values": default_values or {},
+            }
+        ),
+        rendered_content=rendered_content,
         expiration_time=expiration_time,
         status=status,
     )
@@ -1101,6 +1109,46 @@ def test_build_snapshot_events_preserves_public_form_token(
     pause_data = events[-1]["data"]
     assert pause_data["reasons"][0]["form_token"] == "wtok"
     assert pause_data["reasons"][0]["expiration_time"] == to_utc_timestamp(expiration_time)
+
+
+def test_snapshot_replays_persisted_human_input_rendering_and_defaults(
+    sqlite_session_factory: sessionmaker[Session],
+) -> None:
+    _persist_human_input_form(
+        sqlite_session_factory,
+        rendered_content="Please approve: monthly report",
+        default_values={"reviewer_comment": "Previously resolved"},
+    )
+    reason = HumanInputRequired(
+        form_id="form-1",
+        form_content="Please approve {{#llm.text#}}",
+        node_id="node-1",
+        node_title="Human Input",
+        resolved_default_values={"reviewer_comment": "{{#llm.comment#}}"},
+    )
+    pause_entity = _FakePauseEntity(
+        pause_id="pause-1",
+        workflow_run_id="run-1",
+        paused_at_value=datetime(2024, 1, 1, tzinfo=UTC),
+        pause_reasons=[reason],
+    )
+
+    events = _build_snapshot_events(
+        workflow_run=_build_workflow_run(WorkflowExecutionStatus.PAUSED),
+        node_snapshots=[_build_snapshot(WorkflowNodeExecutionStatus.PAUSED)],
+        task_id="task-ctx",
+        message_context=None,
+        pause_entity=pause_entity,
+        resumption_context=_build_resumption_context("task-ctx"),
+        session_maker=sqlite_session_factory,
+    )
+
+    human_input_event = events[-2]["data"]
+    pause_reason = events[-1]["data"]["reasons"][0]
+    assert human_input_event["form_content"] == "Please approve: monthly report"
+    assert human_input_event["resolved_default_values"] == {"reviewer_comment": "Previously resolved"}
+    assert pause_reason["form_content"] == "Please approve: monthly report"
+    assert pause_reason["resolved_default_values"] == {"reviewer_comment": "Previously resolved"}
 
 
 def _build_recipient_snapshot_events(
