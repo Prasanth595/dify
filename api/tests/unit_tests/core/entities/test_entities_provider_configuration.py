@@ -275,6 +275,12 @@ def test_get_provider_names_supports_legacy_and_full_plugin_id() -> None:
     assert provider_names == ["langgenius/openai/openai", "openai"]
 
 
+def test_get_provider_names_does_not_add_alias_for_other_plugin_organizations() -> None:
+    configuration = _build_provider_configuration(provider_name="example/openai/openai")
+
+    assert configuration._get_provider_names() == ["example/openai/openai"]
+
+
 def test_get_model_type_instance_and_schema_delegate_to_factory() -> None:
     configuration = _build_provider_configuration()
     assembly = PluginModelAssembly(tenant_id="tenant-1")
@@ -1274,6 +1280,16 @@ def test_delete_custom_model_removes_credentials_and_load_balancing_configs(
         provider_model_credentials=True,
         provider_load_balancing_configs=True,
     )
+
+
+def test_delete_missing_custom_model_does_not_invalidate_caches(sqlite_provider_session: Session) -> None:
+    configuration = _build_provider_configuration()
+
+    with _mock_cache_boundaries() as (credentials_cache, configuration_cache):
+        configuration.delete_custom_model(ModelType.LLM, "missing-model")
+
+    credentials_cache.assert_not_called()
+    configuration_cache.assert_not_called()
 
 
 def test_add_and_switch_custom_model_credential(sqlite_provider_session: Session) -> None:

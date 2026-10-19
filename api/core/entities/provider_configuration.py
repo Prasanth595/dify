@@ -501,8 +501,7 @@ class ProviderConfiguration(BaseModel):
         provider_names = [self.provider.provider]
         if model_provider_id.is_langgenius():
             alias = model_provider_id.provider_name if "/" in self.provider.provider else str(model_provider_id)
-            if alias not in provider_names:
-                provider_names.append(alias)
+            provider_names.append(alias)
         return provider_names
 
     def _invalidate_provider_configuration_cache(
