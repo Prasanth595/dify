@@ -36,7 +36,7 @@ class InMemoryHologres:
             values = params or ()
             table = self.tables.setdefault(table_name, {})
             for offset in range(0, len(values), len(columns)):
-                row = dict(zip(columns, values[offset : offset + len(columns)]))
+                row = dict(zip(columns, values[offset : offset + len(columns)], strict=False))
                 table[row["id"]] = row
             return []
 

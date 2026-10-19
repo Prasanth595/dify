@@ -1,5 +1,4 @@
 import os
-from typing import Union
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -125,10 +124,10 @@ class InMemoryVikingService:
         assert collection_name != ""
         assert index_name != ""
 
-    def upsert_data(self, data: Union[Data, list[Data]]):
+    def upsert_data(self, data: Data | list[Data]):
         assert data is not None
 
-    def fetch_data(self, id: Union[str, list[str], int, list[int]]):
+    def fetch_data(self, id: str | list[str] | int | list[int]):
         return Data(
             fields={
                 vdb_Field.GROUP_KEY: "test_group",
@@ -140,7 +139,7 @@ class InMemoryVikingService:
             id=id,
         )
 
-    def delete_data(self, id: Union[str, list[str], int, list[int]]):
+    def delete_data(self, id: str | list[str] | int | list[int]):
         assert id is not None
 
     def search_by_vector(
