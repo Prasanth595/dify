@@ -173,13 +173,13 @@ class TestFilePreviewApi:
             assert response.headers["Accept-Ranges"] == "bytes"
 
 
-def _workflow_download() -> WorkflowRunFileDownload:
+def _workflow_download(*, name: str = "report.pdf", size: int = 13) -> WorkflowRunFileDownload:
     return WorkflowRunFileDownload(
-        content=iter([b"workflow file"]),
+        content=iter([b"" if size == 0 else b"workflow file"]),
         file=WorkflowRunFileRecord(
             key="tool_files/tenant/report.pdf",
-            name="report.pdf",
-            size=13,
+            name=name,
+            size=size,
             extension="pdf",
             mime_type="application/pdf",
         ),
@@ -229,6 +229,26 @@ class TestWorkflowRunFileDownloadApi:
         assert response.response is download.content
         assert response.headers["Cache-Control"] == "private, no-store"
         assert response.headers["Content-Disposition"] == "attachment; filename*=UTF-8''report.pdf"
+
+    @patch("controllers.service_api.app.file_preview.application_services")
+    def test_get_handles_empty_attachment_without_filename_or_content_length(
+        self, mock_application_services: Mock
+    ) -> None:
+        app_model = _app()
+        service = mock_application_services.return_value.workflow_run_file_downloads
+        service.get_file.return_value = _workflow_download(name="", size=0)
+
+        response = _get_run_file(
+            args=FilePreviewQuery(as_attachment=True),
+            app_model=app_model,
+            run_id=uuid4(),
+            file_id=uuid4(),
+        )
+
+        assert response.response is not None
+        assert "Content-Length" not in response.headers
+        assert "Content-Disposition" not in response.headers
+        assert response.headers["Cache-Control"] == "private, no-store"
 
     @patch("controllers.service_api.app.file_preview.application_services")
     def test_get_rejects_non_workflow_app_modes(self, mock_application_services: Mock) -> None:

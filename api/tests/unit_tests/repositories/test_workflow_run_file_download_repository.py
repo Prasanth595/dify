@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from core.workflow.file_reference import build_file_reference
 from extensions.storage.storage_type import StorageType
 from graphon.enums import WorkflowExecutionStatus
 from models.base import Base, TypeBase
@@ -134,6 +135,31 @@ def test_get_for_run_downloads_upload_input_owned_by_app_and_run_creator(
     assert result.name == "report.pdf"
 
 
+def test_get_for_run_resolves_local_file_reference_inside_nested_input_list(
+    repository: WorkflowRunFileDownloadQueryRepository, sqlite_session: Session
+) -> None:
+    file_id = str(uuid4())
+    run = _run(
+        inputs={
+            "attachments": [
+                [
+                    {
+                        "type": "document",
+                        "transfer_method": "local_file",
+                        "reference": build_file_reference(record_id=file_id),
+                    }
+                ]
+            ]
+        }
+    )
+    sqlite_session.add_all([_end_user(user_id="user-1"), run, _upload(file_id=file_id)])
+    sqlite_session.commit()
+
+    result = repository.get_for_run(file_id=file_id, run_id="run-1", app_id="app-1", tenant_id="tenant-1")
+
+    assert result.key == f"upload_files/tenant-1/{file_id}.pdf"
+
+
 def test_get_for_run_downloads_tool_output_only_for_owning_run_user(
     repository: WorkflowRunFileDownloadQueryRepository, sqlite_session: Session
 ) -> None:
@@ -156,6 +182,39 @@ def test_get_for_run_downloads_tool_output_only_for_owning_run_user(
 
     assert result.key == tool_file.file_key
     assert result.extension == "pdf"
+
+
+def test_get_for_run_resolves_tool_file_reference_in_nested_output_list(
+    repository: WorkflowRunFileDownloadQueryRepository, sqlite_session: Session
+) -> None:
+    file_id = str(uuid4())
+    run = _run(
+        outputs={
+            "reports": [
+                {
+                    "type": "document",
+                    "transfer_method": "tool_file",
+                    "reference": build_file_reference(record_id=file_id),
+                }
+            ]
+        }
+    )
+    tool_file = ToolFile(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        conversation_id=None,
+        file_key="tool_files/tenant-1/report.pdf",
+        mimetype="application/pdf",
+        name="report.pdf",
+        size=42,
+    )
+    tool_file.id = file_id
+    sqlite_session.add_all([_end_user(user_id="user-1"), run, tool_file])
+    sqlite_session.commit()
+
+    result = repository.get_for_run(file_id=file_id, run_id="run-1", app_id="app-1", tenant_id="tenant-1")
+
+    assert result.key == tool_file.file_key
 
 
 def test_get_for_run_downloads_human_input_upload_by_form_run_app_and_tenant_link(
@@ -187,6 +246,24 @@ def test_get_for_run_rejects_tool_file_from_another_end_user(
     )
     tool_file.id = file_id
     sqlite_session.add_all([_end_user(user_id="user-1"), run, tool_file])
+    sqlite_session.commit()
+
+    with pytest.raises(WorkflowRunFileAccessDeniedError):
+        repository.get_for_run(file_id=file_id, run_id="run-1", app_id="app-1", tenant_id="tenant-1")
+
+
+def test_get_for_run_rejects_upload_owned_by_another_tenant(
+    repository: WorkflowRunFileDownloadQueryRepository, sqlite_session: Session
+) -> None:
+    file_id = str(uuid4())
+    run = _run(inputs={"file": {"type": "document", "transfer_method": "local_file", "upload_file_id": file_id}})
+    sqlite_session.add_all(
+        [
+            _end_user(user_id="user-1"),
+            run,
+            _upload(file_id=file_id, tenant_id="tenant-2"),
+        ]
+    )
     sqlite_session.commit()
 
     with pytest.raises(WorkflowRunFileAccessDeniedError):
