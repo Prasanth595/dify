@@ -283,6 +283,7 @@ class DifyBuilderAppRevisionResponse(ResponseModel):
 
 
 class DifyBuilderSessionStateResponse(ResponseModel):
+    diagnostics: list[dict[str, Any]] = Field(default_factory=list, max_length=33)
     session_id: str
     reply_language: str = Field(
         description="Detected user-input language (BCP-47); empty until a user language is detected."

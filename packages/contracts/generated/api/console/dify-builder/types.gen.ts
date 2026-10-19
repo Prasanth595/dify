@@ -68,6 +68,9 @@ export type DifyBuilderSessionViewResponse = {
   canvas_read_only: boolean
   conversation_last_seq: number
   decision?: Decision | null
+  diagnostics?: Array<{
+    [key: string]: unknown
+  }>
   interrupted: boolean
   last_command_id?: string
   model?: SessionModel | null
@@ -770,6 +773,9 @@ export type DifyBuilderCommandFinishedEventData = {
   command_id: string
   conversation_last_seq: number
   decision?: Decision | null
+  diagnostics?: Array<{
+    [key: string]: unknown
+  }>
   interrupted: boolean
   model?: SessionModel | null
   phase: Phase
@@ -878,6 +884,9 @@ export type PreflightContextCard = {
 export type AssistantTurnItem = {
   card_state?: string | null
   cards?: Array<string>
+  diagnostics?: Array<{
+    [key: string]: unknown
+  }>
   execution: ExecutionProgress
   reasoning_text?: string | null
   reply_language?: string

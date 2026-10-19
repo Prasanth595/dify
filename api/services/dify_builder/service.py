@@ -60,6 +60,7 @@ from core.dify_builder.models import (
 from core.dify_builder.ports import Repository
 from core.dify_builder.state import PcState, canvas_read_only, is_terminal, is_waiting, is_working
 from core.dify_builder.verification import publication_decision
+from services.dify_builder import trace_diagnostics
 from services.dify_builder.action_policy import requires_app_revision
 from services.dify_builder.agent.model_resolver import validate_model_config
 from services.dify_builder.copy_ids import BuilderCopyId
@@ -1455,6 +1456,9 @@ class DifyBuilderService:
         )
         recovery_ref = recovery.recovery_ref_for(fc.recovery_class)
         return SessionView(
+            diagnostics=trace_diagnostics.from_history(
+                self._repo.list_recent_conversation(s.id, limit=24), session_id=s.id, version=s.version
+            ),
             session_id=s.id,
             app_id=s.app_id,
             version=s.version,

@@ -4,6 +4,7 @@ import logging
 import re
 from collections.abc import Callable
 
+from services.dify_builder import trace_diagnostics
 from services.dify_builder.agent import llm
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class LanguageDetector:
                 return "en"
             raw = llm.invoke_text(model, system=_DETECT_SYSTEM, user=text[:2000]).strip()
         except Exception:
+            trace_diagnostics.report("deterministic_fallback", fallback_used=True)
             logger.exception("dify_builder: language detection failed; defaulting to en")
             return "en"
         # Reject anything that isn't a single short, code-shaped token: the model

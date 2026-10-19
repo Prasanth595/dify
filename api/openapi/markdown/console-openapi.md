@@ -19156,6 +19156,7 @@ The archived document is not editable.
 | ---- | ---- | ----------- | -------- |
 | card_state | string |  | No |
 | cards | [ string ] |  | No |
+| diagnostics | [ object ] |  | No |
 | execution | [ExecutionProgress](#executionprogress) |  | Yes |
 | reasoning_text | string |  | No |
 | reply_language | string |  | No |
@@ -21325,6 +21326,7 @@ Enum representing the deployment edition of the platform.
 | command_id | string |  | Yes |
 | conversation_last_seq | integer |  | Yes |
 | decision | [Decision](#decision) |  | No |
+| diagnostics | [ object ] |  | No |
 | interrupted | boolean |  | Yes |
 | model | [SessionModel](#sessionmodel) |  | No |
 | phase | [Phase](#phase) |  | Yes |
@@ -21784,6 +21786,7 @@ Localized display only; submitted values remain in action.payload.
 | canvas_read_only | boolean |  | Yes |
 | conversation_last_seq | integer |  | Yes |
 | decision | [Decision](#decision) |  | No |
+| diagnostics | [ object ] |  | No |
 | interrupted | boolean |  | Yes |
 | last_command_id | string |  | No |
 | model | [SessionModel](#sessionmodel) |  | No |

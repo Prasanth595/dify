@@ -19,6 +19,7 @@ from core.workflow.generator.prompts.builder_prompts import CODE_FAILURE_POLICY_
 from core.workflow.graph_normalizers import declared_branch_handles
 from graphon.enums import BUILT_IN_NODE_TYPES
 from services.dify_builder import credentials, preflight
+from services.dify_builder import trace_diagnostics as diagnostics
 from services.dify_builder.agent import form_schema, graph_prompt, llm
 from services.dify_builder.agent.plan_context import workflow_io_context
 from services.dify_builder.plan import PLAN_PRESENTATION_INSTRUCTION, WorkflowPlan, parse_plan_response
@@ -180,6 +181,7 @@ def analyze_impact(
             on_reasoning=on_reasoning,
         )
     except Exception:
+        diagnostics.report("deterministic_fallback", fallback_used=True)
         return _degraded_impact(goal_text)
     ids = _node_ids(graph)
     raw_targets = data.get("target_node_ids")
@@ -220,14 +222,21 @@ def propose_edit_plan(
         try:
             text = llm.invoke_text(model, system=system, user=user, on_reasoning=on_reasoning)
         except Exception:
+            diagnostics.report("deterministic_fallback", fallback_used=True)
             return None
         try:
             data = json_repair.loads(text)
-        except Exception:
+            if not isinstance(data, dict):
+                diagnostics.report("json_decode_failed", attempt=attempt + 1)
+        except Exception as exc:
+            diagnostics.report("deterministic_fallback", fallback_used=True)
+            diagnostics.report("json_decode_failed", error=exc, attempt=attempt + 1)
             data = None
         try:
             return parse_plan_response(data)
         except ValueError as exc:
+            if isinstance(data, dict):
+                diagnostics.report("response_schema_invalid", error=exc, attempt=attempt + 1)
             issue = str(exc)
         if attempt == 0:
             user = f"{source}\n\nSCHEMA CORRECTION:\n{issue} Reply with ONLY the complete corrected JSON object."
@@ -302,6 +311,7 @@ def build_edit_intents(
     if not first.rejections:
         return first.applicable
 
+    diagnostics.report("validation_refused", attempt=1)
     reasons = "\n".join(first.rejections)
     retry_user = f"{user}\n\nYour previous intents were invalid:\n{reasons}\nReturn corrected intents."
     retried = _invoke_intents(model, system, retry_user, on_reasoning)
@@ -337,6 +347,7 @@ def _refuse_a_batch_already_judged_wrong(vetted: preflight.VettedIntents) -> Non
     off the structured list, never off the rejection text.
     """
     if vetted.would_run_wrong:
+        diagnostics.report("validation_refused")
         raise ProposalWouldRunWrongError("\n".join(vetted.would_run_wrong))
 
 
@@ -349,9 +360,11 @@ def _invoke_intents(
     try:
         data = llm.invoke_json(model, system=system, user=user, on_reasoning=on_reasoning)
     except Exception:
+        diagnostics.report("deterministic_fallback", fallback_used=True)
         return None
     raw = data.get("intents")
     if not isinstance(raw, list):
+        diagnostics.report("response_schema_invalid")
         return None
     out: list[MutationIntent] = []
     for item in raw:

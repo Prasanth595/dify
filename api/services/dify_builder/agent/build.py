@@ -23,7 +23,7 @@ from core.dify_builder.models import BuildNodesResult, MutationIntent
 from core.workflow.generator.prompts.builder_prompts import CODE_FAILURE_POLICY_RULES
 from core.workflow.generator.tool_catalogue import score_tool_relevance
 from graphon.enums import BUILT_IN_NODE_TYPES
-from services.dify_builder import preflight
+from services.dify_builder import preflight, trace_diagnostics
 from services.dify_builder.agent import form_schema, graph_translate, llm, resources, user_supplied
 from services.dify_builder.agent.model_resolver import resolve_model_instance
 from services.dify_builder.agent.resources import ResourceRef
@@ -85,10 +85,12 @@ def analyze_goal(
     try:
         data = llm.invoke_json(model, system=system, user=f"GOAL:\n{goal_text}", on_reasoning=on_reasoning)
     except Exception:
+        trace_diagnostics.report("deterministic_fallback", fallback_used=True)
         return _degraded_form(goal_text)
     fields = data.get("fields")
     values = data.get("values")
     if not isinstance(fields, list) or not isinstance(values, dict):
+        trace_diagnostics.report("response_schema_invalid", fallback_used=True)
         return _degraded_form(goal_text)
     scrubbed_values = _scrub_invented_defaults(values, goal_text)
     answered_values = _answer_goal_restatements(fields, scrubbed_values, goal_text)
@@ -304,6 +306,7 @@ def propose_app_name(
     try:
         raw = llm.invoke_text(model, system=system, user=user, on_reasoning=on_reasoning).strip()
     except Exception:
+        trace_diagnostics.report("deterministic_fallback", fallback_used=True)
         logger.warning("dify_builder: app-name proposal failed; keeping the derived name", exc_info=True)
         return ""
     # A sentence ("Sure! Here is a good name for...") is worse than the
@@ -440,7 +443,8 @@ def planning_catalogue(
     """
     try:
         inventory = resources.list_tenant_resources(tenant_id, account_id=account_id)
-    except Exception:
+    except Exception as exc:
+        trace_diagnostics.report("inventory_unavailable", error=exc, fallback_used=True)
         logger.warning("dify_builder: resource listing failed; planning without a catalogue", exc_info=True)
         return resources.TenantResources(
             models=[], datasets=[], tools=[], agent_source_error="Published Agent catalog unavailable"
@@ -546,14 +550,21 @@ def propose_plan_v1(
             # so parsing and schema correction share the same two-call budget.
             text = llm.invoke_text(model, system=system, user=user, on_reasoning=on_reasoning)
         except Exception:
+            trace_diagnostics.report("deterministic_fallback", fallback_used=True)
             return None
         try:
             data = json_repair.loads(text)
-        except Exception:
+            if not isinstance(data, dict):
+                trace_diagnostics.report("json_decode_failed", attempt=attempt + 1)
+        except Exception as exc:
+            trace_diagnostics.report("deterministic_fallback", fallback_used=True)
+            trace_diagnostics.report("json_decode_failed", error=exc, attempt=attempt + 1)
             data = None
         try:
             return parse_plan_response(data)
         except ValueError as exc:
+            if isinstance(data, dict):
+                trace_diagnostics.report("response_schema_invalid", error=exc, attempt=attempt + 1)
             issue = str(exc)
         if attempt == 0:
             user = f"{source}\n\nSCHEMA CORRECTION:\n{issue} Reply with ONLY the complete corrected JSON object."
@@ -606,6 +617,7 @@ def discover_resources(
         data = llm.invoke_json(model, system=system, user=user, on_reasoning=on_reasoning)
         chosen_ids = [rid for rid in (data.get("resource_ids") or []) if rid in catalog]
     except Exception:
+        trace_diagnostics.report("deterministic_fallback", fallback_used=True)
         logger.warning("dify_builder: resource recommendation failed; recommending none", exc_info=True)
         chosen_ids = []
     # Recommending nothing is the honest answer when there is no signal -- no
@@ -694,6 +706,7 @@ def assess_capability_gap(
             ),
         )
     except Exception:
+        trace_diagnostics.report("deterministic_fallback", fallback_used=True)
         logger.warning("dify_builder: capability-gap assessment failed", exc_info=True)
         return ""
     gap = data.get("gap")
@@ -875,6 +888,7 @@ def learn_from_build(
             or fallback
         )
     except Exception:
+        trace_diagnostics.report("deterministic_fallback", fallback_used=True)
         return fallback
 
 
@@ -1108,7 +1122,8 @@ def _installed_tool_refs(tenant_id: str, account_id: str | None) -> dict[tuple[s
     """Every verified installed Tool schema, uncapped; empty on lookup failure."""
     try:
         tools = resources.list_tenant_resources(tenant_id, account_id=account_id).tools
-    except Exception:
+    except Exception as exc:
+        trace_diagnostics.report("inventory_unavailable", error=exc, fallback_used=True)
         logger.warning("dify_builder: tool listing failed; generating without installed tools", exc_info=True)
         return {}
     return {_tool_key(t): t for t in tools}
@@ -1262,6 +1277,7 @@ def build_nodes(
         )
         return BuildNodesResult(intents=[], error=error, diagnostics=diagnostics)
     except Exception as exc:  # any generation/translation failure -> honest empty build
+        trace_diagnostics.report("deterministic_fallback", fallback_used=True)
         logger.exception(
             "Dify Builder: build_nodes generation failed for tenant %s (%d plan items); returning empty build",
             tenant_id,

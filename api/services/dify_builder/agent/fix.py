@@ -30,6 +30,7 @@ from services.dify_builder import (
     mutation_policy,
     preflight,
 )
+from services.dify_builder import trace_diagnostics as diagnostics
 from services.dify_builder.agent import graph_prompt, llm
 from services.dify_builder.repair_gate import NO_REPAIR_REASON
 
@@ -172,6 +173,7 @@ def diagnose(
     try:
         data = llm.invoke_json(model, system=system, user=user, on_reasoning=on_reasoning)
     except Exception:  # any LLM/provider failure degrades to a surfaced result, never crashes the advance
+        diagnostics.report("deterministic_fallback", fallback_used=True)
         return _degraded_diagnosis(failed, safe_run.error)
     fallback = failed[0].node_id if failed else ""
     diagnosis = _diagnosis_from_json(data, graph, fallback_node=fallback)
@@ -205,6 +207,7 @@ def diagnose_checklist(
     try:
         data = llm.invoke_json(model, system=system, user=user, on_reasoning=on_reasoning)
     except Exception:  # degrade to a surfaced result, never crash the advance
+        diagnostics.report("deterministic_fallback", fallback_used=True)
         return _degraded_checklist(errors)
     fallback = next((e.node_id for e in errors if e.node_id), "")
     return _diagnosis_from_json(data, graph, fallback_node=fallback)
@@ -278,12 +281,14 @@ def _culprit_config(node_id: str, graph: Graph) -> str:
 def _parse_repair(data: dict[str, Any]) -> tuple[list[MutationIntent] | None, Risk]:
     raw = data.get("intents")
     if not isinstance(raw, list):
+        diagnostics.report("response_schema_invalid")
         return None, _no_fix()[1]
     intents: list[MutationIntent] = []
     for item in raw:
         if isinstance(item, dict) and isinstance(item.get("op"), str) and isinstance(item.get("args"), dict):
             intents.append(MutationIntent(op=item["op"], args=item["args"]))
         else:
+            diagnostics.report("response_schema_invalid")
             return None, _no_fix()[1]
     risk_raw = data.get("risk") if isinstance(data.get("risk"), dict) else {}
     risk = Risk(
@@ -336,6 +341,7 @@ def _invoke_repair(
     try:
         data = llm.invoke_json(model, system=system, user=user, on_reasoning=on_reasoning)
     except Exception:  # degrade to a surfaced result, never crash the advance
+        diagnostics.report("deterministic_fallback", fallback_used=True)
         return None, _no_fix()[1]
     return _parse_repair(data)
 
@@ -387,6 +393,7 @@ def propose_repair(
     # surface to the human; a proposal the engine still refuses is not a fix.
     vetted = preflight.vet_intents(graph, intents, _ALLOWED_NODE_TYPES, evidence=diagnosis.condition_evidence)
     if vetted.rejections:
+        diagnostics.report("validation_refused", attempt=1)
         reasons = "\n".join(vetted.rejections)
         retry_user = f"{user}\n\nYour previous intents were invalid:\n{reasons}\nReturn corrected intents."
         if redact_text is not None:
@@ -412,5 +419,6 @@ def propose_repair(
     if vetted.would_run_wrong:
         return _no_fix(_judged_wrong_reason(vetted))
     if vetted.rejections or not vetted.applicable:
+        diagnostics.report("validation_refused")
         return _no_fix()
     return vetted.applicable, _shape_risk(vetted.applicable, graph, risk)

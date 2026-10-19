@@ -396,6 +396,8 @@ class SessionView:
     last_command_id: str = ""
     # Detected user-input language. Empty until the worker detects one.
     reply_language: str = ""
+    # Bounded recent safe observations for debug export after reconnect.
+    diagnostics: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -548,6 +550,7 @@ class AssistantTurnItem(_Card, BuilderPresentation):
     turn_id: str
     stage_id: str
     execution: ExecutionProgress
+    diagnostics: list[dict[str, Any]] = field(default_factory=list)
     reasoning_text: str | None = None
     reply_text: BuilderText | None = None
     reply_mode: Literal["stream", "complete"] = "stream"

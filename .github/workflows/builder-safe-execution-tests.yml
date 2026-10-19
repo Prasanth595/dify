@@ -368,6 +368,7 @@ jobs:
               "api/tests/unit_tests/services/dify_builder/test_new_agent_recovery.py",
               "api/tests/unit_tests/services/dify_builder/test_build_cognition.py",
               "api/tests/unit_tests/services/dify_builder/test_llm_agent.py",
+              "api/tests/unit_tests/services/dify_builder/test_trace_diagnostics.py",
               "api/tests/unit_tests/services/dify_builder/test_build_nodes.py",
               "api/tests/unit_tests/services/dify_builder/test_draft_tool_setup.py",
               "api/tests/unit_tests/services/test_draft_tool_admission.py",
@@ -805,6 +806,7 @@ jobs:
            'test_stub_dify_port_satisfies_dify_port_protocol': 1,
            'test_stub_repository_satisfies_repository_protocol': 1}
           # Exact collected Code failure-policy regression inventories (Local JUnit/AST checked).
+          a4_expected['tests.unit_tests.services.dify_builder.test_trace_diagnostics'] = {'test_provider_failure_is_scoped_safe_and_recoverable': 1, 'test_resolution_failure_and_callback_failure_do_not_crash': 1, 'test_json_and_schema_have_distinct_codes': 1, 'test_env_bounds_resets_and_correlates_diagnostics': 1, 'test_generation_projection_retains_attempt_not_arbitrary_strings': 1, 'test_wrapped_plugin_connection_refusal_is_classified_without_echo': 1, 'test_cas_emission_and_reload_preserve_additive_safe_diagnostics': 1, 'test_catalogue_failure_differs_from_successful_empty': 1, 'test_context_scope_does_not_leak_between_nested_calls': 1, 'test_resolved_model_identifiers_are_bounded_without_extra_config': 1, 'test_previous_operation_callback_cannot_contaminate_new_operation': 1, 'test_edit_fix_and_mock_response_shapes_are_observed': 1, 'test_graph_generation_retry_evidence_survives_success': 1, 'test_stream_iterator_failure_retains_scope': 1, 'test_http_history_serializer_retains_safe_diagnostics': 1, 'test_http_session_snapshot_retains_safe_diagnostics': 1, 'test_language_detection_failure_is_scoped_and_keeps_existing_fallback': 1, 'test_snapshot_history_preserves_identity_and_previous_failure_after_success': 1, 'test_existing_sse_dto_keeps_diagnostic_payload': 1}
           a4_expected['tests.unit_tests.core.workflow.generator.test_runner'] = {
               "test_a_dotted_reference_to_a_scalar_start_variable_is_repaired_to_its_root": 1,
               "test_a_dotted_reference_to_the_start_node_is_never_injected_as_an_input": 1,

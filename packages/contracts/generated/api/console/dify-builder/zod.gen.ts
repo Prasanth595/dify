@@ -1204,6 +1204,7 @@ export const zDifyBuilderSessionViewResponse = z.object({
   canvas_read_only: z.boolean(),
   conversation_last_seq: z.int(),
   decision: zDecision.nullish(),
+  diagnostics: z.array(z.record(z.string(), z.unknown())).max(33).optional(),
   interrupted: z.boolean(),
   last_command_id: z.string().optional().default(''),
   model: zSessionModel.nullish(),
@@ -1226,6 +1227,7 @@ export const zDifyBuilderCommandFinishedEventData = z.object({
   command_id: z.string(),
   conversation_last_seq: z.int(),
   decision: zDecision.nullish(),
+  diagnostics: z.array(z.record(z.string(), z.unknown())).max(33).optional(),
   interrupted: z.boolean(),
   model: zSessionModel.nullish(),
   phase: zPhase,
@@ -1723,6 +1725,7 @@ export const zExecutionProgress = z.object({
 export const zAssistantTurnItem = z.object({
   card_state: z.string().nullish(),
   cards: z.array(z.string()).optional(),
+  diagnostics: z.array(z.record(z.string(), z.unknown())).optional(),
   execution: zExecutionProgress,
   reasoning_text: z.string().nullish(),
   reply_language: z.string().optional().default(''),

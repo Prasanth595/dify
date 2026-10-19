@@ -30,6 +30,7 @@ from extensions.ext_application_services import application_services
 from extensions.ext_database import db
 from models.dataset import Dataset
 from models.provider_ids import ToolProviderID
+from services.dify_builder import trace_diagnostics as diagnostics
 from services.model_provider.service import ModelProviderService
 
 logger = logging.getLogger(__name__)
@@ -154,7 +155,8 @@ def _tool_ref(entry: ToolCatalogueEntry, authorized: set[str] | None) -> Resourc
 def _safe(build, source: str) -> list:
     try:
         return build()
-    except Exception:  # a missing/mis-configured source degrades to empty, never raises
+    except Exception as exc:  # a missing/mis-configured source degrades to empty, never raises
+        diagnostics.report("inventory_unavailable", error=exc)
         logger.warning(
             "Dify Builder: resource source %r failed for the current tenant; treating as empty",
             source,
@@ -200,12 +202,13 @@ def list_tenant_resources(
         ):
             try:
                 authorized = _authorized_providers(tenant_id, account_id)
-            except Exception:  # the lookup degrades to "unknown", not "none authorized"
+            except Exception as exc:  # the lookup degrades to "unknown", not "none authorized"
                 logger.warning(
                     "Dify Builder: resource source %r failed for the current tenant; treating as empty",
                     "tool authorization",
                     exc_info=True,
                 )
+                diagnostics.report("authorization_lookup_failed", error=exc)
                 authorized = None
         return [_tool_ref(t, authorized) for t in tools]
 
@@ -258,7 +261,8 @@ def list_tenant_resources(
                 )
                 for item in candidates
             ]
-        except Exception:
+        except Exception as exc:
+            diagnostics.report("inventory_unavailable", error=exc)
             # Preserve source unavailability separately from a successful empty
             # query, without exposing internal failure/configuration details.
             agent_source_error = "Published Agent catalog unavailable"

@@ -47,7 +47,7 @@ from core.dify_builder.models import (
 )
 from core.dify_builder.ports import DifyBuilderAgent, DifyPort, ReasoningStreamingAgent, Repository
 from core.dify_builder.state import PcState, is_terminal, is_waiting, is_working
-from services.dify_builder import recovery
+from services.dify_builder import recovery, trace_diagnostics
 from services.dify_builder.copy_ids import BuilderCopyId
 from services.dify_builder.presentation import BuilderText, copy_text
 
@@ -127,6 +127,7 @@ class Env:
     event_revision: int = 0
     reasoning_text: str = ""
     command_id: str = ""
+    diagnostics: list[dict] = field(default_factory=list)
     assistant_streams: dict[int, _AssistantStream] = field(default_factory=dict)
 
     def begin_operation(self, session: Session) -> None:
@@ -137,8 +138,33 @@ class Env:
         self.event_revision = 0
         self.reasoning_text = ""
         self.assistant_streams.clear()
+        self.diagnostics.clear()
+        diagnostic_setter = getattr(self.agent, "set_diagnostic_callback", None)
+        if callable(diagnostic_setter):
+            operation_id = self.operation_id
+
+            def record_current(record: dict) -> None:
+                if self.operation_id == operation_id:
+                    self.record_diagnostic(record)
+
+            diagnostic_setter(record_current)
         if isinstance(self.agent, ReasoningStreamingAgent):
             self.agent.set_reasoning_callback(self.record_reasoning)
+
+    def record_diagnostic(self, record: Mapping[str, object]) -> None:
+        if len(self.diagnostics) > 32:
+            return
+        safe = trace_diagnostics.project(record if len(self.diagnostics) < 32 else {"code": "diagnostics_truncated"})
+        if not safe:
+            return
+        safe.update(
+            session_id=self.session_id,
+            command_id=self.command_id,
+            operation_id=self.operation_id,
+            stage_id=self.stage_id,
+            at_version=self.at_version,
+        )
+        self.diagnostics.append(safe)
 
     def next_event_revision(self) -> int:
         self.event_revision += 1
@@ -311,6 +337,8 @@ class Runner:
             # durable. Stamp every item here so cards can never remain at the
             # placeholder version used while a step is being assembled.
             item.at_version = at_version
+            if item.kind == "assistant_turn" and self._env.diagnostics:
+                item.payload["diagnostics"] = [dict(record) for record in self._env.diagnostics]
             if item.kind == "assistant_turn" and self._env.reasoning_text:
                 item.payload["reasoning_text"] = self._env.reasoning_text
             if item.kind == "assistant_turn" and item.payload.get("reply_mode") != "complete":
@@ -414,11 +442,12 @@ class Runner:
             ):
                 raise ConflictError(f"dify_builder: confirmed command is not reserved for session {session_id}")
         elif self._env.detect_language is not None:
-            user_text = turn.action.payload.get("text") if turn.action is not None else None
-            if isinstance(user_text, str) and user_text.strip():
-                fc.reply_language = self._env.detect_language(user_text)
-            elif not fc.reply_language and fc.goal_text:
-                fc.reply_language = self._env.detect_language(fc.goal_text)
+            with trace_diagnostics.scope(self._env.record_diagnostic, "detect-language"):
+                user_text = turn.action.payload.get("text") if turn.action is not None else None
+                if isinstance(user_text, str) and user_text.strip():
+                    fc.reply_language = self._env.detect_language(user_text)
+                elif not fc.reply_language and fc.goal_text:
+                    fc.reply_language = self._env.detect_language(fc.goal_text)
 
         # A retried message may arrive after its user bubble committed but the
         # worker failed before the assistant bubble. Correlate by the

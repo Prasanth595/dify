@@ -20,6 +20,7 @@ from collections.abc import Callable
 from typing import Any
 
 from core.model_manager import ModelInstance
+from services.dify_builder import trace_diagnostics as diagnostics
 from services.dify_builder.agent import build, chat, edit, fix, mock_inputs
 from services.dify_builder.agent.model_resolver import resolve_model_instance
 from services.dify_builder.plan import WorkflowPlan
@@ -39,7 +40,11 @@ class LlmBuilderAgent:
         self._model_config = model_config or {}
         self._model_instance: ModelInstance | None = None
         self._resolution_failed = False
+        self._diagnostic_callback: diagnostics.DiagnosticCallback | None = None
         self._reasoning_callback: Callable[[str, str], None] | None = None
+
+    def set_diagnostic_callback(self, callback: diagnostics.DiagnosticCallback | None) -> None:
+        self._diagnostic_callback = callback
 
     def set_reasoning_callback(self, callback: Callable[[str, str], None] | None) -> None:
         self._reasoning_callback = callback
@@ -62,7 +67,8 @@ class LlmBuilderAgent:
         agent instance (per advance) so a misconfigured llm-mode tenant is visible."""
         try:
             return self._model()
-        except Exception:
+        except Exception as exc:
+            diagnostics.report("model_resolution_failed", error=exc, fallback_used=True)
             if not self._resolution_failed:
                 self._resolution_failed = True
                 logger.warning(
@@ -73,6 +79,7 @@ class LlmBuilderAgent:
             return None
 
     # -- Fix cognition (delegated) --
+    @diagnostics.cognition
     def diagnose(self, failed_run, graph, node_outputs):
         return fix.diagnose(
             self.model_or_none(),
@@ -82,11 +89,13 @@ class LlmBuilderAgent:
             self._reasoning_for("diagnose"),
         )
 
+    @diagnostics.cognition
     def diagnose_with_evidence(self, failed_run, graph, node_outputs, evidence):
         return fix.diagnose(
             self.model_or_none(), failed_run, graph, node_outputs, self._reasoning_for("diagnose"), evidence=evidence
         )
 
+    @diagnostics.cognition
     def propose_with_evidence(self, diagnosis, graph, prompt_graph, redact_text):
         return fix.propose_repair(
             self.model_or_none(),
@@ -97,6 +106,7 @@ class LlmBuilderAgent:
             redact_text=redact_text,
         )
 
+    @diagnostics.cognition
     def diagnose_checklist(self, errors, graph):
         return fix.diagnose_checklist(
             self.model_or_none(),
@@ -105,6 +115,7 @@ class LlmBuilderAgent:
             self._reasoning_for("diagnose-checklist"),
         )
 
+    @diagnostics.cognition
     def propose_repair(self, diagnosis, graph):
         return fix.propose_repair(
             self.model_or_none(),
@@ -113,6 +124,7 @@ class LlmBuilderAgent:
             self._reasoning_for("propose-repair"),
         )
 
+    @diagnostics.cognition
     def generate_mock_inputs(self, schema, prior_failed):
         return mock_inputs.generate(
             self.model_or_none(),
@@ -122,11 +134,13 @@ class LlmBuilderAgent:
         )
 
     # -- Build cognition (real) --
+    @diagnostics.cognition
     def analyze_goal(self, goal_text, *, reply_language: str | None = None):
         return build.analyze_goal(
             self.model_or_none(), goal_text, self._reasoning_for("analyze-goal"), reply_language=reply_language
         )
 
+    @diagnostics.cognition
     def propose_app_name(self, goal_text, requirements):
         return build.propose_app_name(
             self.model_or_none(),
@@ -135,6 +149,7 @@ class LlmBuilderAgent:
             self._reasoning_for("propose-app-name"),
         )
 
+    @diagnostics.cognition
     def propose_plan_v1(self, requirements: dict[str, Any], *, goal_text: str) -> WorkflowPlan | None:
         catalogue = build.planning_catalogue(
             self._tenant_id, account_id=self._account_id, goal_text=goal_text, requirements=requirements
@@ -149,6 +164,7 @@ class LlmBuilderAgent:
             goal_text=goal_text,
         )
 
+    @diagnostics.cognition
     def discover_resources(self, plan_items, *, goal_text: str, requirements: dict[str, Any]):
         return build.discover_resources(
             self.model_or_none(),
@@ -160,16 +176,19 @@ class LlmBuilderAgent:
             account_id=self._account_id,
         )
 
+    @diagnostics.cognition
     def assess_capability_gap(self, plan_items, options, *, goal_text: str, requirements: dict[str, Any]):
         return build.assess_capability_gap(
             self.model_or_none(), plan_items, options, goal_text=goal_text, requirements=requirements
         )
 
+    @diagnostics.cognition
     def bind_resources(self, plan_items, resource_ids):
         return build.bind_resources(
             self.model_or_none(), self._tenant_id, plan_items, resource_ids, account_id=self._account_id
         )
 
+    @diagnostics.cognition
     def build_nodes(self, plan_items, resource_ids=None, *, trusted_text=""):
         return build.build_nodes(
             self._tenant_id,
@@ -180,6 +199,7 @@ class LlmBuilderAgent:
             account_id=self._account_id,
         )
 
+    @diagnostics.cognition
     def learn_from_build(self, goal_text, requirements, plan_items, built_node_ids):
         return build.learn_from_build(
             self.model_or_none(),
@@ -191,6 +211,7 @@ class LlmBuilderAgent:
         )
 
     # -- Edit cognition (real) --
+    @diagnostics.cognition
     def analyze_impact(self, goal_text, graph):
         return edit.analyze_impact(
             self.model_or_none(),
@@ -199,6 +220,7 @@ class LlmBuilderAgent:
             self._reasoning_for("analyze-impact"),
         )
 
+    @diagnostics.cognition
     def propose_edit_plan(self, edit_rules, graph) -> WorkflowPlan | None:
         return edit.propose_edit_plan(
             self.model_or_none(),
@@ -207,6 +229,7 @@ class LlmBuilderAgent:
             self._reasoning_for("propose-edit-plan"),
         )
 
+    @diagnostics.cognition
     def build_edit_intents(self, edit_rules, graph, *, edit_target_node_ids=(), last_edit_rejection=None):
         return edit.build_edit_intents(
             self.model_or_none(),
@@ -217,6 +240,7 @@ class LlmBuilderAgent:
             last_edit_rejection=last_edit_rejection,
         )
 
+    @diagnostics.cognition
     def respond_to_message(self, state, context, history, graph, text, on_delta=None):
         return chat.respond(
             self.model_or_none(),
