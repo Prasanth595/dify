@@ -4745,8 +4745,18 @@ class SkillManagementService:
                 continue
             if char != "\\":
                 if fallback_remaining:
-                    if char not in "\r\n\x00":
-                        fallback_remaining -= 1
+                    end = index + 1
+                    while end < len(source) and source[end] not in "\\{}":
+                        end += 1
+                    literal = payload[index:end].decode(text_encoding, errors="replace")
+                    skipped = 0
+                    while skipped < len(literal) and fallback_remaining:
+                        if literal[skipped] not in "\r\n\x00":
+                            fallback_remaining -= 1
+                        skipped += 1
+                    text_parts.append(literal[skipped:].replace("\r", "\n"))
+                    index = end
+                    continue
                 else:
                     end = index + 1
                     while end < len(source) and source[end] not in "\\{}":

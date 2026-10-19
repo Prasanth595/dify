@@ -3461,6 +3461,11 @@ def test_pptx_extraction_ignores_unreferenced_external_and_missing_slide_parts()
             id="ansi-codepage-multibyte-unicode-fallback",
         ),
         pytest.param(
+            b"{\\rtf1\\ansi\\ansicpg932\\uc1\\u12354 " + bytes([0x82, 0xA0]) + b"X}",
+            "あX",
+            id="ansi-codepage-literal-multibyte-unicode-fallback",
+        ),
+        pytest.param(
             b"{\\rtf1\\ansi\\ansicpg932 \x82\xa0}",
             "あ",
             id="ansi-codepage-literal-text",
