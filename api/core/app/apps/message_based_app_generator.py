@@ -2,7 +2,7 @@ import json
 import logging
 from collections.abc import Callable, Generator, Mapping
 from decimal import Decimal
-from typing import Union, cast
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -55,21 +55,17 @@ logger = logging.getLogger(__name__)
 class MessageBasedAppGenerator(BaseAppGenerator):
     def _handle_response(
         self,
-        application_generate_entity: Union[
-            ChatAppGenerateEntity,
-            CompletionAppGenerateEntity,
-            AgentChatAppGenerateEntity,
-        ],
+        application_generate_entity: ChatAppGenerateEntity | CompletionAppGenerateEntity | AgentChatAppGenerateEntity,
         queue_manager: AppQueueManager,
         conversation: Conversation,
         message: Message,
-        user: Union[Account, EndUser],
+        user: Account | EndUser,
         stream: bool = False,
-    ) -> Union[
-        ChatbotAppBlockingResponse,
-        CompletionAppBlockingResponse,
-        Generator[Union[ChatbotAppStreamResponse, CompletionAppStreamResponse]],
-    ]:
+    ) -> (
+        ChatbotAppBlockingResponse
+        | CompletionAppBlockingResponse
+        | Generator[ChatbotAppStreamResponse | CompletionAppStreamResponse]
+    ):
         """
         Handle response.
         :param application_generate_entity: application generate entity
@@ -126,12 +122,10 @@ class MessageBasedAppGenerator(BaseAppGenerator):
 
     def _init_generate_records(
         self,
-        application_generate_entity: Union[
-            ChatAppGenerateEntity,
-            CompletionAppGenerateEntity,
-            AgentChatAppGenerateEntity,
-            AdvancedChatAppGenerateEntity,
-        ],
+        application_generate_entity: ChatAppGenerateEntity
+        | CompletionAppGenerateEntity
+        | AgentChatAppGenerateEntity
+        | AdvancedChatAppGenerateEntity,
         conversation: Conversation | None = None,
         *,
         session: Session,

@@ -11,6 +11,7 @@ from core.agent.publish_visibility import workflow_callable_active_snapshot_filt
 from libs.datetime_utils import naive_utc_now
 from libs.helper import to_timestamp
 from models.agent import (
+    AGENT_APP_VERSION_OPERATIONS,
     APP_BACKED_AGENT_SOURCES,
     WORKFLOW_ONLY_AGENT_SOURCES,
     Agent,
@@ -1307,12 +1308,7 @@ class AgentRosterService:
         if agent.source == AgentSource.AGENT_APP or (
             agent.source == AgentSource.IMPORTED and agent.scope == AgentScope.ROSTER and agent.app_id
         ):
-            operations = {
-                AgentConfigRevisionOperation.PUBLISH_DRAFT,
-                AgentConfigRevisionOperation.SAVE_NEW_VERSION,
-                AgentConfigRevisionOperation.SAVE_TO_ROSTER,
-                AgentConfigRevisionOperation.RESTORE_VERSION,
-            }
+            operations = set(AGENT_APP_VERSION_OPERATIONS)
             if agent.source == AgentSource.IMPORTED:
                 operations.add(AgentConfigRevisionOperation.IMPORT_PACKAGE)
             return operations

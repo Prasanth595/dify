@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import uuid
@@ -1405,11 +1406,9 @@ class Conversation(TypeBase):
             if not workflow_run:
                 continue
 
-            try:
+            # Handle invalid status values gracefully
+            with contextlib.suppress(ValueError, KeyError):
                 status_counts[WorkflowExecutionStatus(workflow_run.status)] += 1
-            except (ValueError, KeyError):
-                # Handle invalid status values gracefully
-                pass
 
         return {
             "success": status_counts[WorkflowExecutionStatus.SUCCEEDED],
@@ -1808,7 +1807,7 @@ class Message(TypeBase):
             list[MessageFileInfo],
             [
                 {"belongs_to": message_file.belongs_to, "upload_file_id": message_file.upload_file_id, **file.to_dict()}
-                for (file, message_file) in zip(files, message_files)
+                for (file, message_file) in zip(files, message_files, strict=False)
             ],
         )
 
