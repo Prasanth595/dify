@@ -77,12 +77,13 @@ from services.entities.knowledge_entities.rag_pipeline_entities import (
 )
 from services.errors.base import NoPermissionError
 from services.errors.chunk import ChildChunkDeleteIndexError, ChildChunkIndexingError
-from services.errors.dataset import DatasetNameDuplicateError
+from services.errors.dataset import DatasetIndexingInProgressError, DatasetNameDuplicateError
 from services.errors.document import DocumentIndexingError
 from services.errors.file import FileNotExistsError
 from services.feature_service import FeatureService
 from services.file_service import FileService
 from services.knowledge.dataset_access import DatasetAccessRecord, DatasetAccessSnapshot, can_access_dataset
+from services.knowledge.dataset_operation_lock import dataset_operation_lock, lock_dataset_row
 from services.knowledge.entities.document_creation import DocumentCreationDataset, DocumentIndexingJobs
 from services.knowledge.entities.knowledge_entities import (
     KnowledgeConfig,
@@ -1252,12 +1253,28 @@ class DatasetService:
 
     @staticmethod
     def delete_dataset(dataset_id, user, session: Session):
-        dataset = DatasetService.get_dataset(dataset_id, session)
+        deleted: bool | None = None
+        try:
+            with dataset_operation_lock(str(dataset_id)):
+                deleted = DatasetService._delete_dataset_under_operation_lock(dataset_id, user, session)
+                return deleted
+        except LockNotOwnedError:
+            # A long deletion may outlive the Redis lease after its database commit.
+            if deleted is None:
+                raise
+            return deleted
+
+    @staticmethod
+    def _delete_dataset_under_operation_lock(dataset_id, user, session: Session):
+        dataset = lock_dataset_row(session, str(dataset_id))
 
         if dataset is None:
             return False
 
         DatasetService.check_dataset_permission(dataset, user, session)
+
+        if DatasetService._has_active_indexing_documents(dataset_id, session):
+            raise DatasetIndexingInProgressError()
 
         dataset_was_deleted.send(dataset)
 
@@ -1273,6 +1290,25 @@ class DatasetService:
         session.delete(dataset)
         session.commit()
         return True
+
+    @staticmethod
+    def _has_active_indexing_documents(dataset_id: str, session: Session) -> bool:
+        """Return whether a dataset has a document currently processing an indexing stage."""
+        # The dataset adapter may have read the dataset before waiting on the
+        # operation lock. Under MySQL REPEATABLE READ, an EXISTS query here can
+        # reuse that old snapshot and miss indexing work committed while it waited.
+        # A locking row read uses the current committed state instead.
+        active_document_id = session.scalar(
+            select(Document.id)
+            .where(
+                Document.dataset_id == dataset_id,
+                Document.indexing_status.in_(DocumentService._INDEXING_STATUSES),
+                Document.is_paused.is_not(True),
+            )
+            .limit(1)
+            .with_for_update()
+        )
+        return active_document_id is not None
 
     @staticmethod
     def dataset_use_check(dataset_ref: DatasetRef, session: Session) -> bool:
@@ -2166,11 +2202,7 @@ class DocumentService:
         )
         documents: list[Document] = []
         batch = ""
-        lock = (
-            nullcontext()
-            if config.original_document_id
-            else redis_client.lock(f"add_document_lock_dataset_id_{dataset.id}", timeout=600)
-        )
+        lock = nullcontext() if config.original_document_id else dataset_operation_lock(str(dataset.id))
         try:
             with lock:
                 documents, batch, jobs = DocumentService.save_prepared_documents(
