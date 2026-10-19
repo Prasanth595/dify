@@ -2,10 +2,16 @@
 
 import json
 import uuid
+from contextlib import nullcontext
 from unittest.mock import MagicMock, Mock, create_autospec, patch
 
 import pytest
+from sqlalchemy.orm import Session
 
+import tasks.duplicate_document_indexing_task as task_module
+from enums import DeploymentEdition
+from models.dataset import Dataset, Document
+from models.enums import IndexingStatus
 from tasks.duplicate_document_indexing_task import (
     _duplicate_document_indexing_task,
     _duplicate_document_indexing_task_with_tenant_queue,
@@ -13,6 +19,7 @@ from tasks.duplicate_document_indexing_task import (
     normal_duplicate_document_indexing_task,
     priority_duplicate_document_indexing_task,
 )
+from tests.unit_tests.model_factories import make_dataset, make_document
 
 
 @pytest.fixture
@@ -57,6 +64,39 @@ class TestDuplicateDocumentIndexingTask:
 
         # Assert
         mock_core_func.assert_called_once_with(dataset_id, document_ids)
+
+
+@pytest.mark.parametrize("sqlite_session", [(Dataset, Document)], indirect=True)
+def test_skips_duplicate_indexing_when_dataset_is_deleted_before_locked_admission(
+    sqlite_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant_id = str(uuid.uuid4())
+    dataset = make_dataset(dataset_id=str(uuid.uuid4()), tenant_id=tenant_id)
+    document = make_document(dataset_id=dataset.id, tenant_id=tenant_id)
+    document.indexing_status = IndexingStatus.WAITING
+    sqlite_session.add_all([dataset, document])
+    sqlite_session.commit()
+
+    monkeypatch.setattr(
+        task_module.session_factory,
+        "create_session",
+        lambda: Session(bind=sqlite_session.get_bind(), expire_on_commit=False),
+    )
+    monkeypatch.setattr(task_module, "dataset_operation_lock", lambda _dataset_id: nullcontext())
+    monkeypatch.setattr(task_module, "lock_dataset_row", lambda _session, _dataset_id: None)
+    monkeypatch.setattr(task_module.dify_config, "DEPLOYMENT_EDITION", DeploymentEdition.COMMUNITY)
+
+    with (
+        patch.object(task_module, "IndexProcessorFactory") as processor_factory,
+        patch.object(task_module, "build_document_indexing_service") as indexing_builder,
+    ):
+        task_module._duplicate_document_indexing_task(dataset.id, [document.id])
+
+    processor_factory.assert_not_called()
+    indexing_builder.assert_not_called()
+    sqlite_session.refresh(document)
+    assert document.indexing_status == IndexingStatus.WAITING
 
 
 class TestDuplicateDocumentIndexingTaskWithTenantQueue:

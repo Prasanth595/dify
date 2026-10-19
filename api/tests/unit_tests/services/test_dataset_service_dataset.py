@@ -504,6 +504,41 @@ class TestDatasetServiceCreationAndUpdate:
 
         assert sqlite_session.get(Dataset, dataset.id) is None
 
+    def test_delete_dataset_propagates_lock_loss_before_commit(
+        self, sqlite_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from redis.exceptions import LockNotOwnedError
+
+        dataset = _dataset()
+        sqlite_session.add(dataset)
+        sqlite_session.commit()
+
+        class PassthroughLock:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        monkeypatch.setattr(
+            "services.knowledge.dataset_operation_lock.redis_client.lock",
+            lambda *_args, **_kwargs: PassthroughLock(),
+        )
+        monkeypatch.setattr(
+            sqlite_session,
+            "commit",
+            lambda: (_ for _ in ()).throw(LockNotOwnedError("lease expired before delete commit")),
+        )
+
+        with (
+            patch("services.knowledge.dataset_service.dataset_was_deleted.send"),
+            pytest.raises(LockNotOwnedError, match="before delete commit"),
+        ):
+            DatasetService.delete_dataset(dataset.id, _account(), sqlite_session)
+
+        sqlite_session.rollback()
+        assert sqlite_session.get(Dataset, dataset.id) is not None
+
     def test_delete_dataset_rechecks_indexing_started_after_initial_check(
         self,
         sqlite_session: Session,

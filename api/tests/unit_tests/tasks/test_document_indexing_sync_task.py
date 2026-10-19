@@ -11,6 +11,7 @@ from unittest.mock import ANY, MagicMock, patch
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
+import tasks.document_indexing_sync_task as task_module
 from core.db import session_factory as session_factory_module
 from core.rag.index_processor.constant.index_type import IndexStructureType
 from models.dataset import Dataset, Document, DocumentSegment
@@ -282,3 +283,35 @@ class TestDataSourceInfoSerialization:
             assert parsed["last_edited_time"] == "2024-02-01T00:00:00Z"
             assert stored_document.indexing_status == IndexingStatus.PARSING
             assert stored_document.processing_started_at is not None
+
+    def test_sync_skips_when_document_is_deleted_before_locked_lookup(
+        self,
+        document: Document,
+        sqlite_session: Session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        original_lock_dataset_row = task_module.lock_dataset_row
+
+        def delete_document_then_lock(session: Session, dataset_id: str):
+            with Session(bind=sqlite_session.get_bind()) as remover, remover.begin():
+                remover.delete(remover.get(Document, document.id))
+            return original_lock_dataset_row(session, dataset_id)
+
+        monkeypatch.setattr(task_module, "lock_dataset_row", delete_document_then_lock)
+        with (
+            patch("tasks.document_indexing_sync_task.build_data_source_credentials") as provider_builder,
+            patch("tasks.document_indexing_sync_task.NotionExtractor") as extractor_builder,
+            patch("tasks.document_indexing_sync_task.IndexProcessorFactory") as processor_builder,
+            patch("tasks.document_indexing_sync_task.build_document_indexing_service") as indexing_builder,
+        ):
+            provider = MagicMock()
+            provider.get_datasource_credentials.return_value = {"integration_secret": "token"}
+            provider_builder.return_value.providers = provider
+            extractor = MagicMock()
+            extractor.get_notion_last_edited_time.return_value = "2024-02-01T00:00:00Z"
+            extractor_builder.return_value = extractor
+
+            document_indexing_sync_task(document.dataset_id, document.id)
+
+        processor_builder.assert_not_called()
+        indexing_builder.return_value.run.assert_not_called()

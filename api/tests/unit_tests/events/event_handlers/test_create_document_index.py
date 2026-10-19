@@ -105,3 +105,24 @@ def test_handle_runs_indexing_on_success(
     assert persisted_document.indexing_status == IndexingStatus.PARSING
     assert persisted_document.processing_started_at is not None
     assert "Processed dataset: dataset-1" in caplog.text
+
+
+@pytest.mark.parametrize("missing_resource", ["dataset", "document"])
+@pytest.mark.parametrize("sqlite_session", [(Document,)], indirect=True)
+def test_handle_skips_indexing_when_admission_target_disappears(
+    missing_resource: str,
+    persisted_document: Document,
+    sqlite_session: Session,
+    mock_indexing_runner: MagicMock,
+) -> None:
+    if missing_resource == "document":
+        sqlite_session.delete(persisted_document)
+        sqlite_session.commit()
+        dataset_id = persisted_document.dataset_id
+    else:
+        dataset_id = "deleted-dataset"
+
+    with patch.object(handler_module, "build_document_indexing_service", return_value=mock_indexing_runner):
+        handler_module.handle(dataset_id, document_ids=["doc-1"])
+
+    mock_indexing_runner.run.assert_not_called()

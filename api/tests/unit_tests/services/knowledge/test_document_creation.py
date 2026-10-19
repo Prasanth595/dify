@@ -22,6 +22,7 @@ from services.document_indexing_proxy.document_indexing_task_proxy import Docume
 from services.document_indexing_proxy.duplicate_document_indexing_task_proxy import DuplicateDocumentIndexingTaskProxy
 from services.entities.feature_entities import FeatureModel
 from services.errors.file import FileNotExistsError
+from services.knowledge.dataset_access import DatasetNotFoundError
 from services.knowledge.documents.adapters import SQLAlchemyDocumentOperations
 from services.knowledge.resource_scope import DatasetRef
 from tests.unit_tests.model_factories import make_upload_file
@@ -263,6 +264,35 @@ def test_foreign_upload_is_rejected_without_dispatch(
     with pytest.raises(FileNotExistsError):
         operations.create_documents(CONTEXT, REF, config)
     assert external_calls == []
+
+
+def test_upload_aborts_when_dataset_disappears_before_locked_persistence(
+    operations: SQLAlchemyDocumentOperations,
+    external_calls: list[tuple[str, tuple[str, ...]]],
+    sqlite_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from services.knowledge.documents import adapters as adapters_module
+
+    original_lock_dataset_row = adapters_module.lock_dataset_row
+
+    def delete_before_lock(session: Session, dataset_id: str):
+        dataset = session.get(Dataset, dataset_id)
+        if dataset is not None:
+            session.delete(dataset)
+            session.flush()
+            return None
+        return original_lock_dataset_row(session, dataset_id)
+
+    monkeypatch.setattr(adapters_module, "lock_dataset_row", delete_before_lock)
+
+    with pytest.raises(DatasetNotFoundError):
+        operations.create_documents(CONTEXT, REF, settings())
+
+    assert external_calls == []
+    with sqlite_session_factory() as session:
+        assert session.get(Dataset, REF.dataset_id) is not None
+        assert session.scalar(select(Document.id)) is None
 
 
 def test_notion_removal_is_dispatched_after_new_documents_commit(
