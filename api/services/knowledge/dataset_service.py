@@ -1251,8 +1251,16 @@ class DatasetService:
 
     @staticmethod
     def delete_dataset(dataset_id, user, session: Session):
-        with dataset_operation_lock(str(dataset_id)):
-            return DatasetService._delete_dataset_under_operation_lock(dataset_id, user, session)
+        deleted: bool | None = None
+        try:
+            with dataset_operation_lock(str(dataset_id)):
+                deleted = DatasetService._delete_dataset_under_operation_lock(dataset_id, user, session)
+                return deleted
+        except LockNotOwnedError:
+            # A long deletion may outlive the Redis lease after its database commit.
+            if deleted is None:
+                raise
+            return deleted
 
     @staticmethod
     def _delete_dataset_under_operation_lock(dataset_id, user, session: Session):

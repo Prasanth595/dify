@@ -478,6 +478,32 @@ class TestDatasetServiceCreationAndUpdate:
         dataset_was_deleted.assert_not_called()
         assert sqlite_session.get(Dataset, dataset.id) is not None
 
+    def test_delete_dataset_succeeds_if_lock_lease_expires_after_commit(
+        self, sqlite_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        dataset = _dataset()
+        sqlite_session.add(dataset)
+        sqlite_session.commit()
+
+        class ExpiredLock:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                from redis.exceptions import LockNotOwnedError
+
+                raise LockNotOwnedError("lease expired after delete commit")
+
+        monkeypatch.setattr(
+            "services.knowledge.dataset_operation_lock.redis_client.lock",
+            lambda *_args, **_kwargs: ExpiredLock(),
+        )
+
+        with patch("services.knowledge.dataset_service.dataset_was_deleted.send"):
+            assert DatasetService.delete_dataset(dataset.id, _account(), sqlite_session) is True
+
+        assert sqlite_session.get(Dataset, dataset.id) is None
+
     def test_delete_dataset_rechecks_indexing_started_after_initial_check(
         self,
         sqlite_session: Session,
