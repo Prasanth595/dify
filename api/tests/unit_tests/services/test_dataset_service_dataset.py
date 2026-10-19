@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import pytest
 from sqlalchemy import event, select
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.errors.error import LLMBadRequestError, ProviderTokenNotInitError
@@ -25,6 +26,7 @@ from models.dataset import (
     DatasetCollectionBinding,
     DatasetPermission,
     DatasetPermissionEnum,
+    Document,
     ExternalKnowledgeApis,
     ExternalKnowledgeBindings,
     Pipeline,
@@ -417,6 +419,18 @@ class TestDatasetServiceCreationAndUpdate:
         sqlite_session.commit()
 
         assert DatasetService._has_active_indexing_documents(dataset.id, sqlite_session) is expected
+
+    def test_active_indexing_query_uses_mysql_current_read(self) -> None:
+        session = MagicMock()
+        session.scalar.return_value = "active-document"
+
+        assert DatasetService._has_active_indexing_documents("dataset-id", session) is True
+
+        statement = session.scalar.call_args.args[0]
+        sql = str(statement.compile(dialect=mysql.dialect())).upper()
+        assert "FOR UPDATE" in sql
+        assert "EXISTS" not in sql
+        assert Document.__tablename__.upper() in sql
 
     def test_create_empty_dataset_rejects_duplicate_name(self, sqlite_session: Session) -> None:
         sqlite_session.add(_dataset(name="Existing"))

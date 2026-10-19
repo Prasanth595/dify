@@ -1294,17 +1294,21 @@ class DatasetService:
     @staticmethod
     def _has_active_indexing_documents(dataset_id: str, session: Session) -> bool:
         """Return whether a dataset has a document currently processing an indexing stage."""
-        return bool(
-            session.scalar(
-                select(
-                    exists().where(
-                        Document.dataset_id == dataset_id,
-                        Document.indexing_status.in_(DocumentService._INDEXING_STATUSES),
-                        Document.is_paused.is_not(True),
-                    )
-                )
+        # The dataset adapter may have read the dataset before waiting on the
+        # operation lock. Under MySQL REPEATABLE READ, an EXISTS query here can
+        # reuse that old snapshot and miss indexing work committed while it waited.
+        # A locking row read uses the current committed state instead.
+        active_document_id = session.scalar(
+            select(Document.id)
+            .where(
+                Document.dataset_id == dataset_id,
+                Document.indexing_status.in_(DocumentService._INDEXING_STATUSES),
+                Document.is_paused.is_not(True),
             )
+            .limit(1)
+            .with_for_update()
         )
+        return active_document_id is not None
 
     @staticmethod
     def dataset_use_check(dataset_ref: DatasetRef, session: Session) -> bool:
