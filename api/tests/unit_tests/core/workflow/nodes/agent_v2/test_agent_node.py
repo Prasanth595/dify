@@ -59,7 +59,14 @@ from graphon.file import File, FileTransferMethod, FileType
 from graphon.node_events import StreamChunkEvent, StreamCompletedEvent
 from graphon.runtime import GraphRuntimeState
 from graphon.variables.segments import ArrayFileSegment, FileSegment, StringSegment
-from models.agent import Agent, AgentConfigSnapshot, WorkflowAgentNodeBinding
+from models.agent import (
+    Agent,
+    AgentConfigSnapshot,
+    AgentScope,
+    AgentSource,
+    WorkflowAgentBindingType,
+    WorkflowAgentNodeBinding,
+)
 from models.agent_config_entities import (
     AgentSoulConfig,
     AgentSoulModelConfig,
@@ -110,7 +117,9 @@ class FakeVariablePool:
 class FakeBindingResolver(WorkflowAgentBindingResolver):
     def __init__(self):
         self.calls: list[dict[str, object]] = []
-        self.agent = Agent(id="agent-1", tenant_id="tenant-1", name="Agent")
+        self.agent = Agent(
+            scope=AgentScope.ROSTER, source=AgentSource.ROSTER, id="agent-1", tenant_id="tenant-1", name="Agent"
+        )
         self.snapshot = AgentConfigSnapshot(
             id="snapshot-1",
             tenant_id="tenant-1",
@@ -127,6 +136,8 @@ class FakeBindingResolver(WorkflowAgentBindingResolver):
             ),
         )
         self.binding = WorkflowAgentNodeBinding(
+            workflow_version="draft",
+            binding_type=WorkflowAgentBindingType.ROSTER_AGENT,
             id="binding-1",
             tenant_id="tenant-1",
             app_id="app-1",
