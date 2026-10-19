@@ -125,7 +125,7 @@ def external_calls(
         dispatched("duplicate", proxy._dataset_id, tuple(proxy._document_ids))
 
     monkeypatch.setattr("services.knowledge.dataset_service.FeatureService.get_features", features)
-    monkeypatch.setattr("services.knowledge.documents.adapters.redis_client.lock", lock)
+    monkeypatch.setattr("services.knowledge.dataset_operation_lock.redis_client.lock", lock)
     monkeypatch.setattr(DocumentIndexingTaskProxy, "delay", create)
     monkeypatch.setattr(DuplicateDocumentIndexingTaskProxy, "delay", duplicate)
     monkeypatch.setattr(
@@ -329,7 +329,7 @@ def test_lost_creation_lock_keeps_empty_batch_response(
         raise LockNotOwnedError("lock lost")
         yield  # pragma: no cover
 
-    monkeypatch.setattr("services.knowledge.documents.adapters.redis_client.lock", lock)
+    monkeypatch.setattr("services.knowledge.dataset_operation_lock.redis_client.lock", lock)
     result = operations.create_documents(CONTEXT, REF, settings())
     assert result["documents"] == []
     assert result["batch"]
