@@ -22,6 +22,7 @@ from services.knowledge.dataset_operation_lock import dataset_operation_lock, lo
 from services.knowledge.indexing.adapters.execution import build_document_indexing_service
 from services.knowledge.resource_scope import DatasetRef
 from services.rag_pipeline.rag_pipeline import RagPipelineService
+from services.workflow_run_agg import WorkflowRunAgg
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,7 @@ def retry_document_indexing_task(dataset_id: str, document_ids: list[str], user_
                                 document,
                                 user,
                                 generator=PipelineGenerator(
+                                    execution_driver=WorkflowRunAgg.run,
                                     documents=SQLAlchemyDocumentRepository(
                                         session_factory=session_factory.get_session_maker()
                                     ),
