@@ -376,6 +376,7 @@ def _build_snapshot_events(
     if pause_reasons:
         human_input_form_snapshots = _load_human_input_form_snapshots(
             pause_reasons,
+            workflow_run=workflow_run,
             session_maker=session_maker,
         )
         for human_input_event in _build_human_input_required_events(
@@ -495,6 +496,7 @@ def _filter_open_pause_reasons(
 def _load_human_input_form_snapshots(
     pause_reasons: Sequence[PauseReason],
     *,
+    workflow_run: WorkflowRun,
     session_maker: sessionmaker[Session] | None,
 ) -> dict[str, HumanInputFormSnapshot]:
     form_ids = [reason.form_id for reason in pause_reasons if isinstance(reason, HumanInputRequired)]
@@ -506,7 +508,12 @@ def _load_human_input_form_snapshots(
         HumanInputForm.expiration_time,
         HumanInputForm.form_definition,
         HumanInputForm.rendered_content,
-    ).where(HumanInputForm.id.in_(form_ids))
+    ).where(
+        HumanInputForm.id.in_(form_ids),
+        HumanInputForm.workflow_run_id == workflow_run.id,
+        HumanInputForm.app_id == workflow_run.app_id,
+        HumanInputForm.tenant_id == workflow_run.tenant_id,
+    )
     snapshots: dict[str, HumanInputFormSnapshot] = {}
     with session_maker() as session:
         for form_id, expiration_time, form_definition, rendered_content in session.execute(stmt):

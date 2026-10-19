@@ -327,13 +327,16 @@ def _persist_human_input_form(
     status: HumanInputFormStatus = HumanInputFormStatus.WAITING,
     rendered_content: str = "content",
     default_values: Mapping[str, Any] | None = None,
+    tenant_id: str = "tenant-1",
+    app_id: str = "app-1",
+    workflow_run_id: str = "run-1",
 ) -> datetime:
     expiration_time = datetime(2024, 1, 1)
     form = HumanInputForm(
         id=form_id,
-        tenant_id="tenant-1",
-        app_id="app-1",
-        workflow_run_id="run-1",
+        tenant_id=tenant_id,
+        app_id=app_id,
+        workflow_run_id=workflow_run_id,
         conversation_id=None,
         node_id="node-1",
         form_definition=json.dumps(
@@ -1149,6 +1152,51 @@ def test_snapshot_replays_persisted_human_input_rendering_and_defaults(
     assert human_input_event["resolved_default_values"] == {"reviewer_comment": "Previously resolved"}
     assert pause_reason["form_content"] == "Please approve: monthly report"
     assert pause_reason["resolved_default_values"] == {"reviewer_comment": "Previously resolved"}
+
+
+@pytest.mark.parametrize(
+    ("tenant_id", "app_id", "workflow_run_id"),
+    [
+        ("tenant-2", "app-1", "run-1"),
+        ("tenant-1", "app-2", "run-1"),
+        ("tenant-1", "app-1", "run-2"),
+    ],
+    ids=["different-tenant", "different-app", "different-run"],
+)
+def test_snapshot_does_not_load_human_input_forms_outside_run_owner_chain(
+    sqlite_session_factory: sessionmaker[Session],
+    tenant_id: str,
+    app_id: str,
+    workflow_run_id: str,
+) -> None:
+    _persist_human_input_form(
+        sqlite_session_factory,
+        rendered_content="private content from another owner",
+        tenant_id=tenant_id,
+        app_id=app_id,
+        workflow_run_id=workflow_run_id,
+    )
+    pause_entity = _FakePauseEntity(
+        pause_id="pause-1",
+        workflow_run_id="run-1",
+        paused_at_value=datetime(2024, 1, 1, tzinfo=UTC),
+        pause_reasons=[
+            HumanInputRequired(form_id="form-1", form_content="original", node_id="node-1", node_title="Human Input")
+        ],
+    )
+
+    events = _build_snapshot_events(
+        workflow_run=_build_workflow_run(WorkflowExecutionStatus.PAUSED),
+        node_snapshots=[_build_snapshot(WorkflowNodeExecutionStatus.PAUSED)],
+        task_id="task-ctx",
+        message_context=None,
+        pause_entity=pause_entity,
+        resumption_context=_build_resumption_context("task-ctx"),
+        session_maker=sqlite_session_factory,
+    )
+
+    assert all("private content from another owner" not in json.dumps(event) for event in events)
+    assert all(event["event"] != StreamEvent.HUMAN_INPUT_REQUIRED for event in events)
 
 
 def _build_recipient_snapshot_events(
