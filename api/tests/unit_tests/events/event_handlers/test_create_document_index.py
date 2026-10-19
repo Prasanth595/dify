@@ -10,12 +10,14 @@ from models.dataset import Document
 from models.enums import DataSourceType, DocumentCreatedFrom, IndexingStatus
 from services.knowledge.indexing.errors import DocumentIsPausedError
 from services.knowledge.resource_scope import DocumentRef
+from tests.unit_tests.model_factories import make_dataset
 
 
 @pytest.fixture
 def persisted_document(
     sqlite_session: Session,
 ) -> Document:
+    sqlite_session.add(make_dataset(dataset_id="dataset-1"))
     document = Document(
         id="doc-1",
         tenant_id="tenant-1",

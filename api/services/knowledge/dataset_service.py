@@ -83,6 +83,7 @@ from services.errors.file import FileNotExistsError
 from services.feature_service import FeatureService
 from services.file_service import FileService
 from services.knowledge.dataset_access import DatasetAccessRecord, DatasetAccessSnapshot, can_access_dataset
+from services.knowledge.dataset_operation_lock import dataset_operation_lock, lock_dataset_row
 from services.knowledge.entities.document_creation import DocumentCreationDataset, DocumentIndexingJobs
 from services.knowledge.entities.knowledge_entities import (
     KnowledgeConfig,
@@ -1250,7 +1251,12 @@ class DatasetService:
 
     @staticmethod
     def delete_dataset(dataset_id, user, session: Session):
-        dataset = DatasetService.get_dataset(dataset_id, session)
+        with dataset_operation_lock(str(dataset_id)):
+            return DatasetService._delete_dataset_under_operation_lock(dataset_id, user, session)
+
+    @staticmethod
+    def _delete_dataset_under_operation_lock(dataset_id, user, session: Session):
+        dataset = lock_dataset_row(session, str(dataset_id))
 
         if dataset is None:
             return False
@@ -2182,11 +2188,7 @@ class DocumentService:
         )
         documents: list[Document] = []
         batch = ""
-        lock = (
-            nullcontext()
-            if config.original_document_id
-            else redis_client.lock(f"add_document_lock_dataset_id_{dataset.id}", timeout=600)
-        )
+        lock = nullcontext() if config.original_document_id else dataset_operation_lock(str(dataset.id))
         try:
             with lock:
                 documents, batch, jobs = DocumentService.save_prepared_documents(

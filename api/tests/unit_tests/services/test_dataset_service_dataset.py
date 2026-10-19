@@ -8,6 +8,7 @@ external boundaries.
 from __future__ import annotations
 
 from collections.abc import Callable
+from threading import Lock, Thread, get_ident
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -36,6 +37,7 @@ from services.entities.knowledge_entities.rag_pipeline_entities import (
 )
 from services.errors.base import NoPermissionError
 from services.errors.dataset import DatasetIndexingInProgressError, DatasetNameDuplicateError
+from services.knowledge.dataset_operation_lock import dataset_operation_lock
 from services.knowledge.dataset_service import DatasetCollectionBindingService, DatasetPermissionService, DatasetService
 from tests.unit_tests.model_factories import make_account, make_dataset, make_document, make_tenant
 
@@ -475,6 +477,69 @@ class TestDatasetServiceCreationAndUpdate:
 
         dataset_was_deleted.assert_not_called()
         assert sqlite_session.get(Dataset, dataset.id) is not None
+
+    def test_delete_dataset_rechecks_indexing_started_after_initial_check(
+        self,
+        sqlite_session: Session,
+        sqlite_session_factory: sessionmaker[Session],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        dataset = _dataset()
+        document = make_document(dataset_id=dataset.id, tenant_id=dataset.tenant_id)
+        document.indexing_status = IndexingStatus.WAITING
+        sqlite_session.add_all([dataset, document])
+        sqlite_session.commit()
+
+        operation_lock = Lock()
+        lock_acquisition_order: list[int] = []
+
+        class RecordingLock:
+            def __enter__(self):
+                lock_acquisition_order.append(get_ident())
+                operation_lock.acquire()
+                return self
+
+            def __exit__(self, *_args):
+                operation_lock.release()
+
+        monkeypatch.setattr(
+            "services.knowledge.dataset_operation_lock.redis_client.lock",
+            lambda *_args, **_kwargs: RecordingLock(),
+        )
+        original_check = DatasetService._has_active_indexing_documents
+        worker_result: dict[str, bool] = {}
+        worker_thread: Thread | None = None
+
+        def start_indexing_after_check(dataset_id: str, session: Session) -> bool:
+            nonlocal worker_thread
+            assert original_check(dataset_id, session) is False
+
+            def start_worker() -> None:
+                with dataset_operation_lock(dataset_id):
+                    with sqlite_session_factory() as worker_session:
+                        worker_dataset = worker_session.get(Dataset, dataset_id)
+                        worker_document = worker_session.get(type(document), document.id)
+                        worker_result["dataset_exists"] = worker_dataset is not None
+                        if worker_dataset is not None and worker_document is not None:
+                            worker_document.indexing_status = IndexingStatus.PARSING
+                            worker_session.commit()
+
+            worker_thread = Thread(target=start_worker, daemon=True)
+            worker_thread.start()
+            return False
+
+        with (
+            patch.object(DatasetService, "_has_active_indexing_documents", side_effect=start_indexing_after_check),
+            patch("services.knowledge.dataset_service.dataset_was_deleted.send"),
+        ):
+            assert DatasetService.delete_dataset(dataset.id, _account(), sqlite_session) is True
+
+        assert worker_thread is not None
+        worker_thread.join(timeout=5)
+        assert not worker_thread.is_alive()
+        assert lock_acquisition_order == [get_ident(), worker_thread.ident]
+        assert worker_result["dataset_exists"] is False
+        assert sqlite_session.get(Dataset, dataset.id) is None
 
     def test_create_empty_external_dataset_persists_tenant_owned_binding(self, sqlite_session: Session) -> None:
         sqlite_session.add_all([_external_api(), _external_api(api_id="api-foreign", tenant_id="tenant-2")])
