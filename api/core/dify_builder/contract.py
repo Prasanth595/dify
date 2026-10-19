@@ -14,7 +14,7 @@ that value.
 from collections.abc import Collection
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, override
 
 from core.dify_builder.execution_policy import HttpResponseFixtureV1, decode_http_fixture_submission
 from core.dify_builder.models import ConversationItem, EntryMode
@@ -556,6 +556,16 @@ class AssistantTurnItem(_Card, BuilderPresentation):
     reply_mode: Literal["stream", "complete"] = "stream"
     cards: list[str] = field(default_factory=list)
     card_state: str | None = None
+
+    @override
+    def to_item(self, seq: int, at_version: int) -> ConversationItem:
+        item = super().to_item(seq, at_version)
+        # Diagnostics are additive: preserve the existing durable payload when
+        # this turn has no observations. The runner attaches collected records
+        # at CAS, after the handler constructs this item.
+        if not self.diagnostics:
+            item.payload.pop("diagnostics")
+        return item
 
 
 @dataclass
