@@ -160,6 +160,29 @@ def test_get_for_run_resolves_local_file_reference_inside_nested_input_list(
     assert result.key == f"upload_files/tenant-1/{file_id}.pdf"
 
 
+@pytest.mark.parametrize(
+    "file_mapping",
+    [
+        pytest.param(
+            {"type": "document", "transfer_method": "local_file", "reference": ""}, id="empty-local-reference"
+        ),
+        pytest.param({"type": "document", "transfer_method": "tool_file", "reference": ""}, id="empty-tool-reference"),
+        pytest.param({"type": "document", "transfer_method": "remote_url", "tool_file_id": None}, id="null-tool-id"),
+    ],
+)
+def test_get_for_run_does_not_treat_empty_or_invalid_references_as_file_ids(
+    file_mapping: dict[str, object],
+    repository: WorkflowRunFileDownloadQueryRepository,
+    sqlite_session: Session,
+) -> None:
+    file_id = str(uuid4())
+    sqlite_session.add_all([_end_user(user_id="user-1"), _run(inputs={"attachment": file_mapping})])
+    sqlite_session.commit()
+
+    with pytest.raises(WorkflowRunFileNotReferencedError):
+        repository.get_for_run(file_id=file_id, run_id="run-1", app_id="app-1", tenant_id="tenant-1")
+
+
 def test_get_for_run_downloads_tool_output_only_for_owning_run_user(
     repository: WorkflowRunFileDownloadQueryRepository, sqlite_session: Session
 ) -> None:
