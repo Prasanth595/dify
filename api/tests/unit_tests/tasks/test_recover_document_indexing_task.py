@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.orm import Session
@@ -14,16 +13,20 @@ from tasks.recover_document_indexing_task import recover_document_indexing_task
 
 
 @pytest.fixture
-def task_harness(sqlite_session: Session, monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+def task_harness(sqlite_session: Session, monkeypatch: pytest.MonkeyPatch) -> list[bool]:
     engine = sqlite_session.get_bind()
     monkeypatch.setattr(
         task_module.session_factory,
         "create_session",
         lambda: Session(engine, expire_on_commit=False),
     )
-    runner = MagicMock()
-    monkeypatch.setattr(task_module, "build_document_indexing_service", MagicMock(return_value=runner))
-    return runner
+    service_builds: list[bool] = []
+
+    def record_service_build(**_kwargs) -> None:
+        service_builds.append(True)
+
+    monkeypatch.setattr(task_module, "build_document_indexing_service", record_service_build)
+    return service_builds
 
 
 def _dataset_and_document(status: IndexingStatus = IndexingStatus.WAITING) -> tuple[Dataset, Document]:
@@ -54,7 +57,7 @@ def _dataset_and_document(status: IndexingStatus = IndexingStatus.WAITING) -> tu
 @pytest.mark.parametrize("dataset_exists", [False, True])
 def test_recovery_skips_stale_queue_entries(
     sqlite_session: Session,
-    task_harness: MagicMock,
+    task_harness: list[bool],
     dataset_exists: bool,
 ) -> None:
     dataset, document = _dataset_and_document()
@@ -64,25 +67,28 @@ def test_recovery_skips_stale_queue_entries(
 
     recover_document_indexing_task(dataset.id, document.id)
 
-    task_harness.assert_not_called()
+    assert task_harness == []
 
 
 def test_waiting_document_status_is_committed_before_recovery_runs(
     sqlite_session: Session,
-    task_harness: MagicMock,
+    task_harness: list[bool],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dataset, document = _dataset_and_document()
     sqlite_session.add_all([dataset, document])
     sqlite_session.commit()
 
-    def assert_parsing_status_is_persisted(refs) -> None:
+    def assert_parsing_status_is_persisted(**_kwargs) -> None:
+        task_harness.append(True)
         with Session(sqlite_session.get_bind()) as observer:
-            stored = observer.get(Document, refs[0].document_id)
+            stored = observer.get(Document, document.id)
             assert stored is not None
             assert stored.indexing_status == IndexingStatus.PARSING
             assert stored.processing_started_at is not None
+        raise RuntimeError("stop after verifying recovery admission")
 
-    task_harness.run.side_effect = assert_parsing_status_is_persisted
+    monkeypatch.setattr(task_module, "build_document_indexing_service", assert_parsing_status_is_persisted)
     recover_document_indexing_task(dataset.id, document.id)
 
-    task_harness.run.assert_called_once()
+    assert task_harness == [True]
