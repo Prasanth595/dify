@@ -3446,6 +3446,11 @@ def test_pptx_extraction_ignores_unreferenced_external_and_missing_slide_parts()
             id="ansi-codepage-hex-escapes",
         ),
         pytest.param(
+            rb"{\rtf1\ansi\ansicpg99999 caf\'e9}",
+            "café",
+            id="unsupported-ansi-codepage-falls-back",
+        ),
+        pytest.param(
             rb"{\rtf1\ansi\ansicpg932 \'82\'a0}",
             "あ",
             id="ansi-codepage-multibyte-hex-escapes",
