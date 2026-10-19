@@ -4773,7 +4773,10 @@ class SkillManagementService:
                 text_parts.append(source[index + 1])
             index += 2
 
-        text = re.sub(r"[ \t]+\n", "\n", "".join(text_parts))
+        # RTF `\u` values are signed UTF-16 code units; combine valid surrogate pairs
+        # so supplementary characters become normal Unicode code points in Python.
+        text = "".join(text_parts).encode("utf-16", errors="surrogatepass").decode("utf-16", errors="surrogatepass")
+        text = re.sub(r"[ \t]+\n", "\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text).strip()
         if len(text) > max_chars:
             return f"{text[:max_chars]}\n[TRUNCATED]"

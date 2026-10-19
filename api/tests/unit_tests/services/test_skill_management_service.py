@@ -3381,6 +3381,7 @@ def test_pptx_extraction_ignores_unreferenced_external_and_missing_slide_parts()
             rb"{\rtf1\ansi Skill Builder\par reads RTF notes.}", "Skill Builder\nreads RTF notes.", id="ascii"
         ),
         pytest.param(rb"{\rtf1\ansi \u945? followed}", "α followed", id="default-uc1"),
+        pytest.param(rb"{\rtf1\ansi\uc1\u-10179?\u-8704?}", "😀", id="utf16-surrogate-pair"),
         pytest.param(rb"{\rtf1\ansi\uc0\u20320\u22909!}", "你好!", id="uc0-adjacent-unicode"),
         pytest.param(rb"{\rtf1\ansi\uc2\u945?? followed}", "α followed", id="uc2-plain-fallback"),
         pytest.param(rb"{\rtf1\ansi\uc2\u945\'3f\'3f followed}", "α followed", id="uc2-hex-fallback"),
