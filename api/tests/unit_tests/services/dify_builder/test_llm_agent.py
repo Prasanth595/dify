@@ -57,8 +57,9 @@ def test_remaining_build_methods_thread_model_and_tenant_args(monkeypatch):
     seen = {}
 
     def mock_propose_plan_v1(
-        model, requirements, _reasoning=None, *, tools=(), agents=(), agent_source_error=None, goal_text
+        model, requirements, _reasoning=None, *, tools=(), agents=(), agent_source_error=None, goal_text, mode
     ):
+        assert mode == "workflow"
         seen["propose_plan_v1"] = (model, requirements, list(tools), list(agents), agent_source_error, goal_text)
         return []
 
@@ -75,7 +76,8 @@ def test_remaining_build_methods_thread_model_and_tenant_args(monkeypatch):
         seen["discover_resources"] = (model, tenant_id, plan_items, goal_text, requirements)
         return []
 
-    def mock_assess_capability_gap(model, plan_items, options, *, goal_text, requirements):
+    def mock_assess_capability_gap(model, plan_items, options, *, goal_text, requirements, mode):
+        assert mode == "workflow"
         seen["assess_capability_gap"] = (model, plan_items, options, goal_text, requirements)
         return ""
 
@@ -89,9 +91,11 @@ def test_remaining_build_methods_thread_model_and_tenant_args(monkeypatch):
         plan_items,
         resource_ids=(),
         *,
+        mode,
         trusted_text="",
         account_id=None,  # noqa: ARG001
     ):
+        assert mode == "workflow"
         seen["build_nodes"] = (tenant_id, model_config, plan_items, resource_ids, trusted_text)
         return []
 
