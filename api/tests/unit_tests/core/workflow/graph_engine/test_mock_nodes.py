@@ -29,7 +29,9 @@ from graphon.node_events import NodeRunResult, StreamChunkEvent, StreamCompleted
 from graphon.nodes.code import CodeNode
 from graphon.nodes.document_extractor import DocumentExtractorNode
 from graphon.nodes.http_request import HttpRequestNode
+from graphon.nodes.iteration import IterationNode
 from graphon.nodes.llm import LLMNode
+from graphon.nodes.loop import LoopNode
 from graphon.nodes.parameter_extractor import ParameterExtractorNode
 from graphon.nodes.question_classifier import QuestionClassifierNode
 from graphon.nodes.template_transform import TemplateTransformNode
@@ -202,10 +204,7 @@ class MockLLMNode(MockNodeMixin, LLMNode):
             words = text.split(" ")
             for i, word in enumerate(words):
                 # Add space before word (except for first word) to reconstruct text properly
-                if i > 0:
-                    chunk = " " + word
-                else:
-                    chunk = word
+                chunk = " " + word if i > 0 else word
 
                 yield StreamChunkEvent(
                     selector=[self._node_id, "text"],
@@ -612,10 +611,6 @@ class MockDocumentExtractorNode(MockNodeMixin, DocumentExtractorNode):
                 outputs=outputs,
             )
         )
-
-
-from graphon.nodes.iteration import IterationNode
-from graphon.nodes.loop import LoopNode
 
 
 class MockIterationNode(MockNodeMixin, IterationNode):
