@@ -446,6 +446,10 @@ class TestConvertMcpSchemaToParameter:
         ("prop", "expected_type"),
         [
             ({"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "string"),
+            (
+                {"allOf": [{"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}]},
+                "string",
+            ),
             ({"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "string"}]}, "array"),
             ({"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "string"),
             ({"oneOf": [{"type": "array", "items": {"type": "string"}}, {"type": "string"}]}, "array"),
