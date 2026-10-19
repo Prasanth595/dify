@@ -290,11 +290,14 @@ class TestDataSourceInfoSerialization:
         document: Document,
         sqlite_session: Session,
         monkeypatch: pytest.MonkeyPatch,
+        mock_datasource_provider_service,
+        mock_notion_extractor,
         deleted_resource: str,
     ) -> None:
         original_lock_dataset_row = task_module.lock_dataset_row
         dataset_id = document.dataset_id
         document_id = document.id
+        mock_notion_extractor["instance"].get_notion_last_edited_time.return_value = "2024-02-01T00:00:00Z"
 
         def delete_target_then_lock(session: Session, dataset_id: str):
             with Session(bind=sqlite_session.get_bind()) as remover, remover.begin():
@@ -305,21 +308,11 @@ class TestDataSourceInfoSerialization:
                     remover.delete(remover.get(Document, document_id))
             return original_lock_dataset_row(session, dataset_id)
 
+        def fail_if_indexing_is_started(*_args, **_kwargs):
+            raise AssertionError("Indexing should not start after the admission target is deleted")
+
         monkeypatch.setattr(task_module, "lock_dataset_row", delete_target_then_lock)
-        with (
-            patch("tasks.document_indexing_sync_task.build_data_source_credentials") as provider_builder,
-            patch("tasks.document_indexing_sync_task.NotionExtractor") as extractor_builder,
-            patch("tasks.document_indexing_sync_task.IndexProcessorFactory") as processor_builder,
-            patch("tasks.document_indexing_sync_task.build_document_indexing_service") as indexing_builder,
-        ):
-            provider = MagicMock()
-            provider.get_datasource_credentials.return_value = {"integration_secret": "token"}
-            provider_builder.return_value.providers = provider
-            extractor = MagicMock()
-            extractor.get_notion_last_edited_time.return_value = "2024-02-01T00:00:00Z"
-            extractor_builder.return_value = extractor
+        monkeypatch.setattr(task_module, "IndexProcessorFactory", fail_if_indexing_is_started)
+        monkeypatch.setattr(task_module, "build_document_indexing_service", fail_if_indexing_is_started)
 
-            document_indexing_sync_task(dataset_id, document_id)
-
-        processor_builder.assert_not_called()
-        indexing_builder.return_value.run.assert_not_called()
+        document_indexing_sync_task(dataset_id, document_id)
