@@ -10,6 +10,7 @@ from core.tools.entities.tool_entities import WorkflowToolParameterConfiguration
 from core.tools.errors import WorkflowToolHumanInputNotSupportedError
 from models.tools import WorkflowToolProvider
 from models.workflow import Workflow as WorkflowModel
+from models.workflow import WorkflowType
 from services.app_service import AppService, CreateAppParams
 from services.tools.workflow_tools_manage_service import WorkflowToolManageService
 from tests.test_containers_integration_tests.helpers import accounts as account_fixtures
