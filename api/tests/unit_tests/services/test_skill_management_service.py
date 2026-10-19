@@ -3460,6 +3460,11 @@ def test_pptx_extraction_ignores_unreferenced_external_and_missing_slide_parts()
             "あ",
             id="ansi-codepage-literal-text",
         ),
+        pytest.param(
+            rb"{\rtf1\ansi before\'zz\par after}",
+            "before\nafter",
+            id="malformed-hex-escape-preserves-following-text",
+        ),
         pytest.param(rb"{\rtf1\ansi \{notes\} \\ path}", r"{notes} \ path", id="escaped-literal-text"),
     ],
 )
