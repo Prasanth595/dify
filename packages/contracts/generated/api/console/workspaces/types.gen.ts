@@ -550,6 +550,9 @@ export type ParserDynamicOptionsWithCredentials = {
     [key: string]: unknown
   }
   parameter: string
+  parameter_values?: {
+    [key: string]: unknown
+  } | null
   plugin_id: string
   provider: string
 }
@@ -1791,6 +1794,7 @@ export type LatestPluginCache = {
 }
 
 export type PluginParameterOption = {
+  children?: Array<PluginParameterOption>
   icon?: string | null
   label: I18nObject
   value: string
@@ -2593,6 +2597,7 @@ export type ToolParameter = {
         [key: string]: unknown
       }
     | null
+  dynamic_select_lazy_load?: boolean
   form: ToolParameterForm
   human_description?: I18nObject | null
   input_schema?: {
@@ -2712,6 +2717,7 @@ export type AgentStrategyParameter = {
         [key: string]: unknown
       }
     | null
+  dynamic_select_lazy_load?: boolean
   help?: I18nObject | null
   label: I18nObject
   max?: number | number | null
@@ -2913,6 +2919,7 @@ export type ToolParameterType =
   | 'date'
   | 'date-range'
   | 'dynamic-select'
+  | 'dynamic-tree-select'
   | 'file'
   | 'files'
   | 'model-selector'
@@ -4875,6 +4882,7 @@ export type GetWorkspacesCurrentPluginParametersDynamicOptionsData = {
     action: string
     credential_id?: string
     parameter: string
+    parameter_values?: string
     plugin_id: string
     provider: string
     provider_type: 'tool' | 'trigger'
@@ -4918,6 +4926,35 @@ export type PostWorkspacesCurrentPluginParametersDynamicOptionsWithCredentialsRe
 
 export type PostWorkspacesCurrentPluginParametersDynamicOptionsWithCredentialsResponse =
   PostWorkspacesCurrentPluginParametersDynamicOptionsWithCredentialsResponses[keyof PostWorkspacesCurrentPluginParametersDynamicOptionsWithCredentialsResponses]
+
+export type GetWorkspacesCurrentPluginParametersDynamicTreeOptionsData = {
+  body?: never
+  path?: never
+  query: {
+    action: string
+    credential_id?: string
+    parameter: string
+    parameter_values?: string
+    plugin_id: string
+    provider: string
+  }
+  url: '/workspaces/current/plugin/parameters/dynamic-tree-options'
+}
+
+export type GetWorkspacesCurrentPluginParametersDynamicTreeOptionsErrors = {
+  400: PluginError | ErrorResponse
+  default: ErrorResponse
+}
+
+export type GetWorkspacesCurrentPluginParametersDynamicTreeOptionsError =
+  GetWorkspacesCurrentPluginParametersDynamicTreeOptionsErrors[keyof GetWorkspacesCurrentPluginParametersDynamicTreeOptionsErrors]
+
+export type GetWorkspacesCurrentPluginParametersDynamicTreeOptionsResponses = {
+  200: PluginDynamicOptionsResponse
+}
+
+export type GetWorkspacesCurrentPluginParametersDynamicTreeOptionsResponse =
+  GetWorkspacesCurrentPluginParametersDynamicTreeOptionsResponses[keyof GetWorkspacesCurrentPluginParametersDynamicTreeOptionsResponses]
 
 export type PostWorkspacesCurrentPluginPermissionChangeData = {
   body: ParserPermissionChange
