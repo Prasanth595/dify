@@ -180,6 +180,18 @@ describe('extractFunctionParams', () => {
     expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
   })
 
+  it('recognizes a regex after a standalone block in a JavaScript default', () => {
+    const code =
+      'function main({ matcher: matcher = () => { {} /[),]/.test(value); return true }, text }) { return { matcher, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
+  })
+
+  it('keeps division after an arrow block before a regex literal', () => {
+    const code =
+      'function main({ value: value = (() => {}) / /[),]/.test(input), text }) { return { value, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['value', 'text'])
+  })
+
   it.each(['if (enabled)', 'while (enabled)', 'for (;;)'])(
     'recognizes a regex statement after a control condition in an arrow default (%s)',
     (controlCondition) => {
