@@ -727,7 +727,7 @@ def test_delete_segment_with_legacy_scalar_keywords(
         document = session.get(Document, "document-1")
         assert document is not None
         assert document.word_count == 0
-    expected_index_node_ids = ["index-1"] if enabled else []
+    expected_index_node_ids: list[str] = ["index-1"] if enabled else []
     assert probe.tasks == [("delete", (expected_index_node_ids, "dataset-1", "document-1", ["segment-1"], []))]
 
 
