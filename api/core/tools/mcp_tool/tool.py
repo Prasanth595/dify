@@ -41,10 +41,14 @@ def schema_accepts_multiple_types(schema: Mapping[str, Any]) -> bool:
     """Whether a JSON schema property can accept more than one JSON type."""
     all_non_null_types = {"array", "boolean", "number", "object", "string"}
 
-    def possible_types(current: Mapping[str, Any], depth: int = 0) -> set[str]:
+    def possible_types(current: Mapping[str, Any], depth: int = 0, ancestors: frozenset[int] = frozenset()) -> set[str]:
         # MCP schemas are JSON and cannot be cyclic, but keep this bounded for malformed/deep input.
         if depth >= 10:
             return all_non_null_types
+        current_id = id(current)
+        if current_id in ancestors:
+            return set()
+        ancestors = ancestors | {current_id}
 
         constraints: list[set[str]] = []
         declared = current.get("type")
@@ -60,15 +64,16 @@ def schema_accepts_multiple_types(schema: Mapping[str, Any]) -> bool:
         for union_key in ("anyOf", "oneOf"):
             branches = current.get(union_key)
             if isinstance(branches, list):
-                constraints.append(
-                    set().union(
-                        *(possible_types(branch, depth + 1) for branch in branches if isinstance(branch, Mapping))
-                    )
-                )
+                branch_types = [
+                    possible_types(branch, depth + 1, ancestors) for branch in branches if isinstance(branch, Mapping)
+                ]
+                constraints.append(set().union(*branch_types))
 
         all_of = current.get("allOf")
         if isinstance(all_of, list):
-            constraints.extend(possible_types(branch, depth + 1) for branch in all_of if isinstance(branch, Mapping))
+            constraints.extend(
+                possible_types(branch, depth + 1, ancestors) for branch in all_of if isinstance(branch, Mapping)
+            )
 
         if not constraints:
             return all_non_null_types
