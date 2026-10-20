@@ -31,7 +31,7 @@ const canStartJavaScriptRegex = (code: string, start: number) => {
 }
 
 const isJavaScriptControlConditionOpen = (code: string, start: number) =>
-  /(?:^|[^\w$.])(?:catch|if|while|for(?:\s+await)?|with)\s*$/.test(code.slice(0, start))
+  /(?:^|[^\w$.])(?:catch|if|switch|while|for(?:\s+await)?|with)\s*$/.test(code.slice(0, start))
 
 const isJavaScriptControlBodyOpen = (code: string, start: number) =>
   /(?:^|[^\w$.])(?:else|finally|try)\s*$/.test(code.slice(0, start))

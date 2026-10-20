@@ -174,6 +174,12 @@ describe('extractFunctionParams', () => {
     expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
   })
 
+  it('recognizes a regex after a switch block in a JavaScript default', () => {
+    const code =
+      'function main({ matcher: matcher = () => { switch (kind) { case "x": break; default: break } /[),]/.test(value); return true }, text }) { return { matcher, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
+  })
+
   it.each(['if (enabled)', 'while (enabled)', 'for (;;)'])(
     'recognizes a regex statement after a control condition in an arrow default (%s)',
     (controlCondition) => {
