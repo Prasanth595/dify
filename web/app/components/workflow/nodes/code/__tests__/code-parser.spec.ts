@@ -132,6 +132,12 @@ describe('extractFunctionParams', () => {
     expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['value', 'text'])
   })
 
+  it('recognizes a regex literal after the greater-than operator', () => {
+    const code =
+      'function main({ matched: matched = value > /,/.test(input), text }) { return { matched, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matched', 'text'])
+  })
+
   it('recognizes a regex literal after an arrow function default', () => {
     const code =
       'function main({ matcher: matcher = () => /[,(]/, text }) { return { matcher, text } }'

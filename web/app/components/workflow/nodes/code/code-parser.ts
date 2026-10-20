@@ -10,7 +10,7 @@ const canStartJavaScriptRegex = (code: string, start: number) => {
   const previousChar = code[previous]!
   if ((previousChar === '+' || previousChar === '-') && code[previous - 1] === previousChar)
     return false
-  if ('([{,;:=!?&|+-*%^~</'.includes(previousChar)) return true
+  if ('([{,;:=!?&|+-*%^~<>/'.includes(previousChar)) return true
   if (previousChar === '>' && code[previous - 1] === '=') return true
 
   const previousWord = code.slice(0, previous + 1).match(/[\w$]+$/)?.[0]
