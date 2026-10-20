@@ -10,6 +10,20 @@ from extensions.storage.oracle_oci_storage import OracleOCIStorage
 
 
 @pytest.mark.parametrize("storage_type", [AwsS3Storage, OracleOCIStorage])
+def test_load_once_closes_response_body(storage_type: type[AwsS3Storage] | type[OracleOCIStorage]) -> None:
+    raw = BytesIO(b"payload")
+    body = StreamingBody(raw, len(b"payload"))
+    storage = storage_type.__new__(storage_type)
+    storage.bucket_name = "test-bucket"
+    storage.client = MagicMock()
+    storage.client.get_object.return_value = {"Body": body}
+
+    assert storage.load_once("key") == b"payload"
+
+    assert raw.closed
+
+
+@pytest.mark.parametrize("storage_type", [AwsS3Storage, OracleOCIStorage])
 @pytest.mark.parametrize("close_early", [True, False])
 def test_load_stream_closes_response_body(
     storage_type: type[AwsS3Storage] | type[OracleOCIStorage], close_early: bool
