@@ -190,6 +190,17 @@ def test_huawei_load_stream_closes_response_body_when_consumer_stops_early() -> 
     assert raw.closed
 
 
+def test_huawei_load_stream_closes_response_body_after_full_read() -> None:
+    raw, body = _huawei_body(b"x" * 8192)
+    storage = HuaweiObsStorage.__new__(HuaweiObsStorage)
+    storage.bucket_name = "test-bucket"
+    storage.client = _huawei_client(body)
+
+    assert list(storage.load_stream("key")) == [b"x" * 4096, b"x" * 4096]
+
+    assert raw.closed
+
+
 def _http_response(payload: bytes) -> HTTPResponse:
     return HTTPResponse(
         body=BytesIO(payload),
