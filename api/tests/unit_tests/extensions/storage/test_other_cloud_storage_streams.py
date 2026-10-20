@@ -9,6 +9,8 @@ from baidubce.auth.bce_credentials import BceCredentials
 from baidubce.bce_client_configuration import BceClientConfiguration
 from baidubce.bce_response import BceResponse
 from baidubce.services.bos.bos_client import BosClient
+from obs import ObsClient
+from obs.model import GetResult, ObjectStream, ResponseWrapper
 from oss2.http import Response as OssResponse
 from oss2.models import GetObjectResult
 from tos.models2 import GetObjectOutput
@@ -17,6 +19,7 @@ from urllib3.response import HTTPResponse
 
 from extensions.storage.aliyun_oss_storage import AliyunOssStorage
 from extensions.storage.baidu_obs_storage import BaiduObsStorage
+from extensions.storage.huawei_obs_storage import HuaweiObsStorage
 from extensions.storage.volcengine_tos_storage import VolcengineTosStorage
 
 
@@ -100,6 +103,30 @@ def test_volcengine_load_stream_closes_response_body_when_consumer_stops_early()
     assert raw.closed
 
 
+def test_huawei_load_once_closes_response_body() -> None:
+    raw, body = _huawei_body(b"payload")
+    storage = HuaweiObsStorage.__new__(HuaweiObsStorage)
+    storage.bucket_name = "test-bucket"
+    storage.client = _huawei_client(body)
+
+    assert storage.load_once("key") == b"payload"
+
+    assert raw.closed
+
+
+def test_huawei_load_stream_closes_response_body_when_consumer_stops_early() -> None:
+    raw, body = _huawei_body(b"x" * 8192)
+    storage = HuaweiObsStorage.__new__(HuaweiObsStorage)
+    storage.bucket_name = "test-bucket"
+    storage.client = _huawei_client(body)
+
+    stream = storage.load_stream("key")
+    assert next(stream) == b"x" * 4096
+    stream.close()
+
+    assert raw.closed
+
+
 def _http_response(payload: bytes) -> HTTPResponse:
     return HTTPResponse(
         body=BytesIO(payload),
@@ -156,4 +183,20 @@ def _volcengine_client(body: GetObjectOutput) -> tos.TosClientV2:
         region="cn-beijing",
     )
     client.get_object = lambda bucket, key: body  # noqa: ARG005
+    return client
+
+
+def _huawei_body(payload: bytes) -> tuple[HTTPResponse, GetResult]:
+    raw = _http_response(payload)
+    response = ResponseWrapper(conn=raw, result=raw, connHolder=None, contentLength=len(payload))
+    return raw, GetResult(body=ObjectStream(response=response))
+
+
+def _huawei_client(body: GetResult) -> ObsClient:
+    client = ObsClient(
+        access_key_id="test-access-key",
+        secret_access_key="test-secret-key",
+        server="https://obs.cn-north-4.myhuaweicloud.com",
+    )
+    client.getObject = lambda bucketName, objectKey: body  # noqa: N803, ARG005
     return client
