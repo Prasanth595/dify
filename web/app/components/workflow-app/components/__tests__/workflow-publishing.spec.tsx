@@ -126,6 +126,7 @@ beforeEach(() => {
       parameters: [
         {
           name: '__image',
+          reset_on_change: [],
           label: { en_US: 'files' },
           type: 'files',
           form: 'llm',
