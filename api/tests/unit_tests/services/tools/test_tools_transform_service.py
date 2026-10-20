@@ -492,6 +492,17 @@ class TestConvertMcpSchemaToParameter:
         param = ToolTransformService.convert_mcp_schema_to_parameter(schema)[0]
         assert param.type.value == expected_type
 
+    def test_deeply_nested_all_of_preserves_schema_when_type_resolution_limit_is_reached(self):
+        prop = {"type": "array", "items": {"type": "string"}}
+        for _ in range(12):
+            prop = {"allOf": [prop]}
+
+        schema = {"type": "object", "properties": {"domain": prop}, "required": []}
+        param = ToolTransformService.convert_mcp_schema_to_parameter(schema)[0]
+
+        assert param.type.value == "string"
+        assert param.input_schema == prop
+
     @pytest.mark.parametrize(
         "prop",
         [
