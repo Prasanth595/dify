@@ -3467,6 +3467,13 @@ def test_build_assistant_attachment_context_extracts_rtf_text(payload: bytes, ex
     context.encode("utf-8")
 
 
+def test_extract_rtf_text_combines_surrogate_pair_before_truncation() -> None:
+    text = SkillManagementService._extract_rtf_text(rb"{\rtf1\ansi\uc1\u-10179?\u-8704?}", max_chars=1)
+
+    assert text == "😀"
+    text.encode("utf-8")
+
+
 def test_build_assistant_image_contents_encodes_images_for_vision_models() -> None:
     attachments = [
         SkillAssistAttachmentPayload(
