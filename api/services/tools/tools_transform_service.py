@@ -457,6 +457,8 @@ class ToolTransformService:
         :return: list of ToolParameter instances
         """
 
+        supported_types = {"array", "boolean", "float", "integer", "number", "object", "string"}
+
         def resolve_property_types(prop: dict[str, Any], depth: int = 0) -> list[str] | None:
             """
             Resolve the possible JSON types while guarding against deeply nested schemas.
@@ -468,14 +470,16 @@ class ToolTransformService:
             prop_type = prop.get("type")
             if isinstance(prop_type, list):
                 declared_types = [
-                    type_name for type_name in prop_type if isinstance(type_name, str) and type_name != "null"
+                    type_name
+                    for type_name in prop_type
+                    if isinstance(type_name, str) and type_name != "null" and type_name in supported_types
                 ]
                 if prop_type:
                     constraints.append(
                         ["number" if type_name in ("integer", "float") else type_name for type_name in declared_types]
                     )
             elif isinstance(prop_type, str):
-                declared_types = [] if prop_type == "null" else [prop_type]
+                declared_types = [prop_type] if prop_type != "null" and prop_type in supported_types else []
                 constraints.append(
                     ["number" if type_name in ("integer", "float") else type_name for type_name in declared_types]
                 )
