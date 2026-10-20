@@ -1459,8 +1459,9 @@ export type WorkflowRestoreResponse = {
   updated_at: number
 }
 
-export type ApiKeyList = {
+export type ApiKeyListWithLimitResponse = {
   data: Array<ApiKeyItem>
+  max_keys: number
 }
 
 export type ApiKeyItem = {
@@ -9171,7 +9172,7 @@ export type GetAppsByResourceIdApiKeysError =
   GetAppsByResourceIdApiKeysErrors[keyof GetAppsByResourceIdApiKeysErrors]
 
 export type GetAppsByResourceIdApiKeysResponses = {
-  200: ApiKeyList
+  200: ApiKeyListWithLimitResponse
 }
 
 export type GetAppsByResourceIdApiKeysResponse =
