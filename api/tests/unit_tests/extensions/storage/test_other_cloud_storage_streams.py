@@ -55,6 +55,18 @@ def test_aliyun_load_once_closes_response_body_when_read_fails() -> None:
     assert raw.closed
 
 
+def test_aliyun_load_once_closes_response_body_when_read_returns_non_bytes() -> None:
+    raw, body = _aliyun_body(b"payload")
+    body.__dict__["read"] = lambda amt=None: "not bytes"  # noqa: ARG005
+    storage = AliyunOssStorage.__new__(AliyunOssStorage)
+    storage.folder = ""
+    storage.client = _aliyun_client(body)
+
+    assert storage.load_once("key") == b""
+
+    assert raw.closed
+
+
 def test_baidu_load_once_closes_response_body() -> None:
     raw, body = _baidu_body(b"payload")
     storage = BaiduObsStorage.__new__(BaiduObsStorage)
@@ -86,6 +98,19 @@ def test_volcengine_load_once_closes_response_body() -> None:
     storage.client = _volcengine_client(body)
 
     assert storage.load_once("key") == b"payload"
+
+    assert raw.closed
+
+
+def test_volcengine_load_once_closes_response_body_when_read_returns_non_bytes() -> None:
+    raw, body = _volcengine_body(b"payload")
+    body.__dict__["read"] = lambda amt=None: "not bytes"  # noqa: ARG005
+    storage = VolcengineTosStorage.__new__(VolcengineTosStorage)
+    storage.bucket_name = "test-bucket"
+    storage.client = _volcengine_client(body)
+
+    with pytest.raises(TypeError, match="Expected bytes, got str"):
+        storage.load_once("key")
 
     assert raw.closed
 
