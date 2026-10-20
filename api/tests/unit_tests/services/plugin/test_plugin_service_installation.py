@@ -464,23 +464,23 @@ class TestPluginCompatibilityAdmission:
         return response
 
     @pytest.mark.parametrize(
-        ("install_method", "install_args"),
+        ("install", "install_args"),
         [
-            ("install_from_local_pkg", ("t1", ["incompatible-uid"])),
-            ("install_from_github", ("t1", "incompatible-uid", "org/repo", "v1", "plugin.difypkg")),
+            (PluginService.install_from_local_pkg, ("t1", ["incompatible-uid"])),
+            (PluginService.install_from_github, ("t1", "incompatible-uid", "org/repo", "v1", "plugin.difypkg")),
         ],
     )
     @patch("core.plugin.plugin_service.SystemFeatureService")
     @patch("core.plugin.plugin_service.PluginInstaller")
     def test_rejects_incompatible_decoded_packages_before_install_dispatch(
-        self, mock_installer_cls, mock_fs, install_method, install_args
+        self, mock_installer_cls, mock_fs, install, install_args
     ):
         mock_fs.get_plugin_installation_permission.return_value = _make_permission()
         installer = mock_installer_cls.return_value
         installer.decode_plugin_from_identifier.return_value = self._incompatible_decode_response()
 
         with pytest.raises(PluginInstallationForbiddenError, match="requires Dify"):
-            getattr(PluginService, install_method)(*install_args)
+            install(*install_args)
 
         installer.install_from_identifiers.assert_not_called()
 
