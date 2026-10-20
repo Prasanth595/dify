@@ -230,6 +230,8 @@ def _register_controllers() -> tuple[ModuleType, ...]:
         saved_message,
         trial,
     )
+    from .knowledge_fs import features as knowledge_fs_features
+    from .knowledge_fs import resources as knowledge_fs_resources
     from .snippets import snippet_workflow, snippet_workflow_draft_variable
     from .socketio import workflow as socketio_workflow
 
@@ -328,6 +330,8 @@ def _register_controllers() -> tuple[ModuleType, ...]:
         recommended_app,
         saved_message,
         trial,
+        knowledge_fs_features,
+        knowledge_fs_resources,
         snippet_workflow,
         snippet_workflow_draft_variable,
         socketio_workflow,
@@ -423,6 +427,8 @@ def _register_controllers() -> tuple[ModuleType, ...]:
     recommended_app,
     saved_message,
     trial,
+    knowledge_fs_features,
+    knowledge_fs_resources,
     snippet_workflow,
     snippet_workflow_draft_variable,
     socketio_workflow,
@@ -490,6 +496,8 @@ __all__ = [
     "human_input_form",
     "init_validate",
     "installed_app",
+    "knowledge_fs_features",
+    "knowledge_fs_resources",
     "load_balancing_config",
     "login",
     "mcp_server",

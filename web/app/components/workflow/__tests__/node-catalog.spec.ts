@@ -3,6 +3,12 @@ import { useWorkflowNodeCatalog } from '@/app/components/workflow/node-catalog'
 import { BlockEnum } from '@/app/components/workflow/types'
 
 const mockIsAgentV2Enabled = vi.hoisted(() => vi.fn(() => true))
+const mockKnowledgeFsEnabled = vi.hoisted(() => vi.fn(() => true))
+
+vi.mock('@/features/knowledge-fs-availability/state', async () => {
+  const { atom } = await import('jotai')
+  return { knowledgeFsEnabledAtom: atom(() => mockKnowledgeFsEnabled()) }
+})
 const mockIsAgentV2InChatflowEnabled = vi.hoisted(() => vi.fn(() => false))
 
 vi.mock('@/features/agent-v2/feature-flag', () => ({
@@ -18,6 +24,7 @@ describe('useWorkflowNodeCatalog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockIsAgentV2Enabled.mockReturnValue(true)
+    mockKnowledgeFsEnabled.mockReturnValue(true)
     mockIsAgentV2InChatflowEnabled.mockReturnValue(false)
   })
 
@@ -177,5 +184,16 @@ describe('useWorkflowNodeCatalog', () => {
     expect(result.current.nodesMap?.[BlockEnum.Agent]?.metaData.helpLinkUri).toBe(
       '/docs/use-dify/nodes/agent#classic-agent',
     )
+  })
+
+  it('should hide Knowledge Retrieval v2 when KnowledgeFS is disabled', () => {
+    mockKnowledgeFsEnabled.mockReturnValue(false)
+
+    const { result } = renderWorkflowHook(() => useWorkflowNodeCatalog(), {
+      resource: { kind: 'app', appId: 'app-1', mode: 'workflow' },
+    })
+
+    expect(result.current.nodesMap?.[BlockEnum.KnowledgeRetrieval]).toBeDefined()
+    expect(result.current.nodesMap?.[BlockEnum.KnowledgeRetrievalV2]).toBeUndefined()
   })
 })

@@ -31,9 +31,10 @@ def _register_controllers() -> tuple[ModuleType, ...]:
     """Load route modules after their namespace exists."""
 
     from . import mail, runtime_credentials
-    from .agent import files, llm, runtime_usage, tools
+    from .agent import files, knowledge, llm, runtime_usage, tools
     from .app import app, dsl, file_grants
     from .knowledge import retrieval
+    from .knowledge_fs import background, storage, texts, vectors
     from .plugin import agent_config, plugin, skills
     from .workspace import workspace
 
@@ -41,6 +42,7 @@ def _register_controllers() -> tuple[ModuleType, ...]:
         mail,
         runtime_credentials,
         files,
+        knowledge,
         llm,
         runtime_usage,
         tools,
@@ -48,6 +50,10 @@ def _register_controllers() -> tuple[ModuleType, ...]:
         dsl,
         file_grants,
         retrieval,
+        background,
+        storage,
+        texts,
+        vectors,
         agent_config,
         plugin,
         skills,
@@ -59,6 +65,7 @@ def _register_controllers() -> tuple[ModuleType, ...]:
     _mail,
     _runtime_credentials,
     _agent_files,
+    _agent_knowledge,
     _agent_llm,
     _agent_runtime_usage,
     _agent_tools,
@@ -66,6 +73,10 @@ def _register_controllers() -> tuple[ModuleType, ...]:
     _app_dsl,
     _app_file_grants,
     _knowledge_retrieval,
+    _knowledge_fs_background,
+    _knowledge_fs_storage,
+    _knowledge_fs_texts,
+    _knowledge_fs_vectors,
     _agent_config,
     _plugin,
     _skills,
@@ -77,12 +88,17 @@ api.add_namespace(inner_api_ns)
 __all__ = [
     "_agent_config",
     "_agent_files",
+    "_agent_knowledge",
     "_agent_llm",
     "_agent_runtime_usage",
     "_agent_tools",
     "_app_app",
     "_app_dsl",
     "_app_file_grants",
+    "_knowledge_fs_background",
+    "_knowledge_fs_storage",
+    "_knowledge_fs_texts",
+    "_knowledge_fs_vectors",
     "_knowledge_retrieval",
     "_mail",
     "_plugin",

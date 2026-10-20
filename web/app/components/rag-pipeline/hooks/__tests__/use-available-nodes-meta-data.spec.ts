@@ -1,9 +1,17 @@
 import { renderHook } from '@testing-library/react'
+import { createStore, Provider } from 'jotai'
+import { createElement } from 'react'
 import { expect, it, vi } from 'vite-plus/test'
 import { BlockEnum } from '@/app/components/workflow/types'
 import { useAvailableNodesMetaData } from '../use-available-nodes-meta-data'
 
 const mockIsAgentV2Enabled = vi.hoisted(() => vi.fn(() => true))
+const mockKnowledgeFsEnabled = vi.hoisted(() => vi.fn(() => true))
+
+vi.mock('@/features/knowledge-fs-availability/state', async () => {
+  const { atom } = await import('jotai')
+  return { knowledgeFsEnabledAtom: atom(() => mockKnowledgeFsEnabled()) }
+})
 
 vi.mock('@/context/i18n', () => ({
   useDocLink: () => (path?: string) => `https://docs.dify.ai${path || ''}`,
@@ -15,6 +23,7 @@ vi.mock('@/features/agent-v2/feature-flag', () => ({
 
 it.each([true, false])('offers the pipeline node catalog with Agent v2 enabled=%s', (enabled) => {
   mockIsAgentV2Enabled.mockReturnValue(enabled)
+  mockKnowledgeFsEnabled.mockReturnValue(true)
   const { result } = renderHook(() => useAvailableNodesMetaData())
   const { nodes, nodesMap } = result.current
   const types = nodes.map((node) => node.metaData.type)
@@ -25,6 +34,7 @@ it.each([true, false])('offers the pipeline node catalog with Agent v2 enabled=%
       BlockEnum.DataSource,
       BlockEnum.KnowledgeBase,
       BlockEnum.DataSourceEmpty,
+      BlockEnum.KnowledgeRetrievalV2,
       enabled ? BlockEnum.AgentV2 : BlockEnum.Agent,
     ]),
   )
@@ -49,4 +59,16 @@ it.each([true, false])('offers the pipeline node catalog with Agent v2 enabled=%
       title: `workflow.blocks.${type}`,
     })
   }
+})
+
+it('hides Knowledge Retrieval V2 when KnowledgeFS is unavailable', () => {
+  mockKnowledgeFsEnabled.mockReturnValue(false)
+  // A fresh store re-reads the flag instead of reusing the default store's cached value.
+  const store = createStore()
+  const { result } = renderHook(() => useAvailableNodesMetaData(), {
+    wrapper: ({ children }) => createElement(Provider, { store }, children),
+  })
+  const types = result.current.nodes.map((node) => node.metaData.type)
+  expect(types).not.toContain(BlockEnum.KnowledgeRetrievalV2)
+  expect(result.current.nodesMap[BlockEnum.KnowledgeRetrievalV2]).toBeUndefined()
 })

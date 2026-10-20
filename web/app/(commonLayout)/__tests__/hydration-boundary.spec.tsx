@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   workspace: vi.fn(),
   permissions: vi.fn(),
   features: vi.fn(),
+  knowledgeFsFeatures: vi.fn(),
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`)
   }),
@@ -37,6 +38,7 @@ vi.mock('@/service/console', async (importOriginal) => {
     ...actual,
     consoleQuery: withConsoleResponses(actual.consoleQuery, {
       'features.get': mocks.features,
+      'knowledgeFs.features.get': mocks.knowledgeFsFeatures,
       'workspaces.current.summary.get': mocks.workspace,
       'workspaces.current.rbac.myPermissions.get': mocks.permissions,
     }),
@@ -53,6 +55,7 @@ const createClient = () => {
 }
 const keys = {
   features: consoleQuery.features.get.queryOptions().queryKey,
+  knowledgeFsFeatures: consoleQuery.knowledgeFs.features.get.queryOptions().queryKey,
   workspace: consoleQuery.workspaces.current.summary.get.queryOptions().queryKey,
   permissions: consoleQuery.workspaces.current.rbac.myPermissions.get.queryOptions().queryKey,
 }
@@ -90,6 +93,11 @@ beforeEach(() => {
     dataset: { default_permission_keys: [], overrides: [] },
   })
   mocks.features.mockResolvedValue({ enable_skill: true })
+  mocks.knowledgeFsFeatures.mockResolvedValue({
+    enabled: true,
+    upload_enabled: true,
+    agent_enabled: false,
+  })
 })
 afterEach(() => clients.splice(0).forEach((client) => client.clear()))
 
@@ -108,6 +116,7 @@ it('hydrates the profile, workspace, permissions and feature data', async () => 
     workspace: { permission_keys: ['agent.acl.preview'] },
   })
   expect(client.getQueryData(keys.features)).toEqual({ enable_skill: true })
+  expect(client.getQueryData(keys.knowledgeFsFeatures)).toMatchObject({ enabled: true })
 })
 
 it.each([true, false])(
@@ -138,7 +147,7 @@ it('does not hydrate another request’s feature flag after a failed prefetch', 
   expect(mocks.redirect).not.toHaveBeenCalled()
 })
 
-it.each(['workspace', 'permissions', 'features'] as const)(
+it.each(['workspace', 'permissions', 'features', 'knowledgeFsFeatures'] as const)(
   'keeps the shell recoverable when %s fails',
   async (target) => {
     mocks[target].mockRejectedValue(new Error(`${target} unavailable`))
@@ -189,6 +198,12 @@ it('renders the shell without server prefetch when the API URL cannot be resolve
   const element = await CommonLayoutHydrationBoundary({ children: <div>Common shell</div> })
   render(<QueryClientProvider client={createClient()}>{element}</QueryClientProvider>)
   expect(screen.getByText('Common shell')).toBeInTheDocument()
-  for (const fetch of [mocks.profile, mocks.workspace, mocks.permissions, mocks.features])
+  for (const fetch of [
+    mocks.profile,
+    mocks.workspace,
+    mocks.permissions,
+    mocks.features,
+    mocks.knowledgeFsFeatures,
+  ])
     expect(fetch).not.toHaveBeenCalled()
 })
