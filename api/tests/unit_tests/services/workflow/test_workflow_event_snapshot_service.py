@@ -327,6 +327,7 @@ def _persist_human_input_form(
     status: HumanInputFormStatus = HumanInputFormStatus.WAITING,
     rendered_content: str = "content",
     default_values: Mapping[str, Any] | None = None,
+    form_definition: str | None = None,
     tenant_id: str = "tenant-1",
     app_id: str = "app-1",
     workflow_run_id: str = "run-1",
@@ -339,7 +340,8 @@ def _persist_human_input_form(
         workflow_run_id=workflow_run_id,
         conversation_id=None,
         node_id="node-1",
-        form_definition=json.dumps(
+        form_definition=form_definition
+        or json.dumps(
             {
                 "display_in_ui": True,
                 "rendered_content": rendered_content,
@@ -1152,6 +1154,75 @@ def test_snapshot_replays_persisted_human_input_rendering_and_defaults(
     assert human_input_event["resolved_default_values"] == {"reviewer_comment": "Previously resolved"}
     assert pause_reason["form_content"] == "Please approve: monthly report"
     assert pause_reason["resolved_default_values"] == {"reviewer_comment": "Previously resolved"}
+
+
+@pytest.mark.parametrize(
+    "form_definition",
+    ["not-json", json.dumps({"default_values": ["invalid"]})],
+    ids=["malformed-json", "non-object-default-values"],
+)
+def test_snapshot_falls_back_when_persisted_form_definition_is_invalid(
+    sqlite_session_factory: sessionmaker[Session],
+    form_definition: str,
+) -> None:
+    _persist_human_input_form(
+        sqlite_session_factory,
+        rendered_content="Persisted rendered content",
+        form_definition=form_definition,
+    )
+    pause_entity = _FakePauseEntity(
+        pause_id="pause-1",
+        workflow_run_id="run-1",
+        paused_at_value=datetime(2024, 1, 1, tzinfo=UTC),
+        pause_reasons=[
+            HumanInputRequired(
+                form_id="form-1",
+                form_content="Original content",
+                node_id="node-1",
+                node_title="Human Input",
+                resolved_default_values={"reviewer_comment": "Reason fallback"},
+            )
+        ],
+    )
+
+    events = _build_snapshot_events(
+        workflow_run=_build_workflow_run(WorkflowExecutionStatus.PAUSED),
+        node_snapshots=[_build_snapshot(WorkflowNodeExecutionStatus.PAUSED)],
+        task_id="task-ctx",
+        message_context=None,
+        pause_entity=pause_entity,
+        resumption_context=_build_resumption_context("task-ctx"),
+        session_maker=sqlite_session_factory,
+    )
+
+    human_input_event = events[-2]["data"]
+    pause_reason = events[-1]["data"]["reasons"][0]
+    assert human_input_event["form_content"] == "Persisted rendered content"
+    assert human_input_event["resolved_default_values"] == {"reviewer_comment": "Reason fallback"}
+    assert pause_reason["form_content"] == "Persisted rendered content"
+    assert pause_reason["resolved_default_values"] == {"reviewer_comment": "Reason fallback"}
+
+
+def test_load_human_input_form_snapshots_returns_empty_without_query_inputs(
+    sqlite_session_factory: sessionmaker[Session],
+) -> None:
+    workflow_run = _build_workflow_run(WorkflowExecutionStatus.PAUSED)
+    reason = HumanInputRequired(
+        form_id="form-1",
+        form_content="content",
+        node_id="node-1",
+        node_title="Human Input",
+    )
+
+    assert (
+        service_module._load_human_input_form_snapshots(
+            [], workflow_run=workflow_run, session_maker=sqlite_session_factory
+        )
+        == {}
+    )
+    assert (
+        service_module._load_human_input_form_snapshots([reason], workflow_run=workflow_run, session_maker=None) == {}
+    )
 
 
 @pytest.mark.parametrize(
