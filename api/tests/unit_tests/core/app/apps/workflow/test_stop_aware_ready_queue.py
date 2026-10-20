@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from queue import Empty
 from unittest.mock import Mock, patch
+
+import pytest
 
 from core.app.apps.workflow.stop_aware_ready_queue import (
     StopAwareReadyQueue,
@@ -58,6 +61,35 @@ def test_ready_queue_rejects_next_node_when_stop_flag_is_set() -> None:
 
     stop_flag.assert_called_once_with("task-1")
     inner.put.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("aborted", "stop_flag_is_set"),
+    [(True, False), (False, True)],
+    ids=["graph-aborted", "user-stop-flag"],
+)
+def test_ready_queue_drops_pending_work_after_stop(
+    aborted: bool,
+    stop_flag_is_set: bool,
+) -> None:
+    inner = Mock()
+    inner.get.return_value = _start_task("already-queued-node")
+    queue = StopAwareReadyQueue(
+        inner,
+        task_id="task-1",
+        graph_execution=_graph_execution(aborted=aborted),
+    )
+
+    with (
+        patch(
+            "core.app.apps.workflow.stop_aware_ready_queue.is_app_task_stop_flag_set",
+            return_value=stop_flag_is_set,
+        ),
+        pytest.raises(Empty),
+    ):
+        queue.get(timeout=0.01)
+
+    inner.task_done.assert_called_once_with()
 
 
 def test_attach_stop_aware_ready_queue_wraps_once() -> None:
