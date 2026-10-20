@@ -465,6 +465,34 @@ class TestConvertMcpSchemaToParameter:
         assert param.input_schema == prop
 
     @pytest.mark.parametrize(
+        ("prop", "expected_type"),
+        [
+            (
+                {
+                    "allOf": [
+                        {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+                        {"type": "array", "items": {"type": "string"}},
+                    ]
+                },
+                "array",
+            ),
+            (
+                {
+                    "allOf": [
+                        {"type": "array", "items": {"type": "string"}},
+                        {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+                    ]
+                },
+                "array",
+            ),
+        ],
+    )
+    def test_all_of_resolves_the_intersected_parameter_type(self, prop, expected_type):
+        schema = {"type": "object", "properties": {"domain": prop}, "required": []}
+        param = ToolTransformService.convert_mcp_schema_to_parameter(schema)[0]
+        assert param.type.value == expected_type
+
+    @pytest.mark.parametrize(
         "prop",
         [
             {"type": ["string", "null"]},
