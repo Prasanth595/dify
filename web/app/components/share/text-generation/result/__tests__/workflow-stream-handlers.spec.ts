@@ -206,12 +206,25 @@ describe('workflow state transformations', () => {
       rendered_content: 'Done',
     })
     expect(process.humanInputFormDataList?.map((form) => form.node_id)).toEqual(['node-2'])
+    process = updateHumanInputFilled(process, {
+      action_id: 'submit',
+      action_text: 'Submit second form',
+      node_id: 'node-2',
+      node_title: 'Node 2',
+      rendered_content: 'Second form done',
+    })
+    expect(process.humanInputFormDataList).toEqual([])
     expect(process.humanInputFilledFormDataList).toEqual([
       expect.objectContaining({
         node_id: 'node-1',
         action_text: 'Submit',
         form_content: 'content',
         inputs: [],
+      }),
+      expect.objectContaining({
+        node_id: 'node-2',
+        action_text: 'Submit second form',
+        rendered_content: 'Second form done',
       }),
     ])
     const paused = applyWorkflowPaused(process)
@@ -668,6 +681,38 @@ describe('createWorkflowStreamHandlers', () => {
     )
     expect(setup.onCompleted).toHaveBeenCalledWith('', 3, false)
     expect(setup.setRespondingFalse).toHaveBeenCalled()
+  })
+
+  it('falls back when workflow outputs cannot be JSON-stringified', () => {
+    const setup = setupHandlers()
+    const handlers = setup.handlers as Required<Pick<IOtherOptions, 'onWorkflowFinished'>>
+    const outputs: Record<string, unknown> = {}
+    outputs.self = outputs
+
+    handlers.onWorkflowFinished({
+      task_id: 'task-1',
+      workflow_run_id: 'run-1',
+      event: 'workflow_finished',
+      data: {
+        id: 'run-1',
+        workflow_id: 'wf-1',
+        status: WorkflowRunningStatus.Succeeded,
+        outputs,
+        error: '',
+        elapsed_time: 0,
+        total_tokens: 0,
+        total_steps: 0,
+        created_at: 0,
+        created_by: {
+          id: 'user-1',
+          name: 'User',
+          email: 'user@example.com',
+        },
+        finished_at: 0,
+      },
+    })
+
+    expect(setup.setCompletionRes).toHaveBeenCalledWith('[object Object]')
   })
 
   it('should finish timed-out workflow state and warn without applying late outputs', () => {
