@@ -235,6 +235,18 @@ class TestMCPToolTransform:
         assert result[0].type == ToolParameter.ToolParameterType.OBJECT
         assert result[0].input_schema == schema["properties"]["retrieval_model"]
 
+    def test_convert_mcp_schema_to_parameter_preserves_union_with_untyped_branch(self):
+        """A union with an untyped branch should retain the full schema when type inference is ambiguous."""
+        union_schema = {"anyOf": [{"type": "object"}, {"description": "Accept any JSON value"}]}
+        schema = {"type": "object", "properties": {"config": union_schema}}
+
+        result = ToolTransformService.convert_mcp_schema_to_parameter(schema)
+
+        assert len(result) == 1
+        assert result[0].name == "config"
+        assert result[0].type == ToolParameter.ToolParameterType.STRING
+        assert result[0].input_schema == union_schema
+
     def test_convert_mcp_schema_to_parameter_handles_null_type(self):
         """Schemas with only a null type should fall back to string."""
         schema = {
