@@ -269,3 +269,13 @@ describe('Variable Utilities', () => {
     })
   })
 })
+
+describe('getVars prototype-named keys', () => {
+  it('keeps valid variables named like Object prototype members', () => {
+    expect(getVars('{{constructor}} {{toString}} {{normal}}')).toEqual([
+      'constructor',
+      'toString',
+      'normal',
+    ])
+  })
+})
