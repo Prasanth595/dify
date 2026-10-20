@@ -572,6 +572,44 @@ class TestSegmentAttachmentCleanup:
             assert session.get(UploadFile, attachment_file.id) is None
             assert session.get(SegmentAttachmentBinding, binding.id) is None
 
+    def test_clean_dataset_task_preserves_attachment_bound_in_another_dataset(
+        self,
+        dataset_id: str,
+        tenant_id: str,
+        collection_binding_id: str,
+        orm_session_maker: sessionmaker[Session],
+        mock_storage: MagicMock,
+        mock_index_processor_factory: dict[str, MagicMock],
+        mock_get_image_upload_file_ids: MagicMock,
+    ) -> None:
+        binding, attachment_file = _persist_attachment(
+            orm_session_maker,
+            dataset_id=dataset_id,
+            tenant_id=tenant_id,
+        )
+        other_binding = SegmentAttachmentBinding(
+            tenant_id=tenant_id,
+            dataset_id=str(uuid.uuid4()),
+            document_id=str(uuid.uuid4()),
+            segment_id=str(uuid.uuid4()),
+            attachment_id=attachment_file.id,
+        )
+        with orm_session_maker.begin() as session:
+            session.add(other_binding)
+
+        _run_clean_dataset(
+            dataset_id=dataset_id,
+            tenant_id=tenant_id,
+            collection_binding_id=collection_binding_id,
+        )
+
+        mock_storage.delete.assert_not_called()
+        mock_index_processor_factory["processor"].clean.assert_called_once()
+        with orm_session_maker() as session:
+            assert session.get(SegmentAttachmentBinding, binding.id) is None
+            assert session.get(SegmentAttachmentBinding, other_binding.id) is not None
+            assert session.get(UploadFile, attachment_file.id) is not None
+
     def test_clean_dataset_task_attachment_storage_failure(
         self,
         dataset_id: str,

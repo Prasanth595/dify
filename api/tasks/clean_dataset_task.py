@@ -230,18 +230,30 @@ def _delete_attachments(session: Session, tenant_id: str, dataset_id: str) -> No
         attachment_file.id for _, attachment_file in attachments_with_bindings if attachment_file is not None
     ]
     binding_ids = [binding.id for binding, _ in attachments_with_bindings]
-    for binding, attachment_file in attachments_with_bindings:
-        if attachment_file is None:
-            continue
+    shared_attachment_ids = set(
+        session.scalars(
+            select(SegmentAttachmentBinding.attachment_id).where(
+                SegmentAttachmentBinding.attachment_id.in_(attachment_ids),
+                SegmentAttachmentBinding.id.not_in(binding_ids),
+            )
+        ).all()
+    )
+    orphaned_attachment_ids = set(attachment_ids) - shared_attachment_ids
+    orphaned_files = {
+        attachment_file.id: attachment_file
+        for _, attachment_file in attachments_with_bindings
+        if attachment_file is not None and attachment_file.id in orphaned_attachment_ids
+    }
+    for attachment_file in orphaned_files.values():
         try:
             storage.delete(attachment_file.key)
         except Exception:
             logger.exception(
                 "Delete attachment_file failed when storage deleted, attachment_file_id: %s",
-                binding.attachment_id,
+                attachment_file.id,
             )
-    if attachment_ids:
-        session.execute(delete(UploadFile).where(UploadFile.id.in_(attachment_ids)))
+    if orphaned_attachment_ids:
+        session.execute(delete(UploadFile).where(UploadFile.id.in_(orphaned_attachment_ids)))
     session.execute(delete(SegmentAttachmentBinding).where(SegmentAttachmentBinding.id.in_(binding_ids)))
     session.commit()
 
