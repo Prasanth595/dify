@@ -34,6 +34,28 @@ def test_load_once_closes_response_body(storage_factory: S3StorageFactory) -> No
 @pytest.mark.parametrize(
     "storage_factory", [lambda: AwsS3Storage.__new__(AwsS3Storage), lambda: OracleOCIStorage.__new__(OracleOCIStorage)]
 )
+def test_load_once_closes_response_body_when_read_fails(storage_factory: S3StorageFactory) -> None:
+    class FailingBody(StreamingBody):
+        @override
+        def read(self, amt: int | None = None) -> bytes:
+            raise OSError("stream read failed")
+
+    raw = BytesIO()
+    body = FailingBody(raw, 0)
+    storage = storage_factory()
+    storage.bucket_name = "test-bucket"
+    storage.client, stubber = _s3_client()
+    stubber.add_response("get_object", {"Body": body, "ContentLength": 0}, {"Bucket": "test-bucket", "Key": "key"})
+
+    with stubber, pytest.raises(OSError, match="stream read failed"):
+        storage.load_once("key")
+
+    assert raw.closed
+
+
+@pytest.mark.parametrize(
+    "storage_factory", [lambda: AwsS3Storage.__new__(AwsS3Storage), lambda: OracleOCIStorage.__new__(OracleOCIStorage)]
+)
 @pytest.mark.parametrize("close_early", [True, False])
 def test_load_stream_closes_response_body(storage_factory: S3StorageFactory, close_early: bool) -> None:
     raw = BytesIO(b"x" * 2048)
