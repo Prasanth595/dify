@@ -8,6 +8,7 @@ verification, marketplace upgrade flows, and uninstall with credential cleanup.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime
 from typing import cast
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -17,9 +18,15 @@ from flask import Flask
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from core.plugin.entities.plugin import PluginInstallationSource
-from core.plugin.entities.plugin_daemon import PluginVerification
+from core.plugin.entities.plugin import (
+    PluginCategory,
+    PluginDeclaration,
+    PluginInstallationSource,
+    PluginResourceRequirements,
+)
+from core.plugin.entities.plugin_daemon import PluginDecodeResponse, PluginVerification
 from core.plugin.plugin_service import PluginService
+from core.tools.entities.common_entities import I18nObject
 from enums import DeploymentEdition
 from models import ProviderType
 from models.engine import db
@@ -457,11 +464,23 @@ class TestInstallFromMarketplacePkg:
 class TestPluginCompatibilityAdmission:
     @staticmethod
     def _incompatible_decode_response():
-        response = MagicMock()
-        response.verification = None
-        response.manifest.meta.minimum_dify_version = "999.0.0"
-        response.unique_identifier = "incompatible-uid"
-        return response
+        return PluginDecodeResponse(
+            unique_identifier="incompatible-uid",
+            verification=None,
+            manifest=PluginDeclaration(
+                version="1.0.0",
+                author="test-author",
+                name="test-plugin",
+                description=I18nObject(en_US="Test plugin"),
+                icon="icon.png",
+                label=I18nObject(en_US="Test plugin"),
+                category=PluginCategory.Tool,
+                created_at=datetime(2026, 1, 1),
+                resource=PluginResourceRequirements(memory=512),
+                plugins=PluginDeclaration.Plugins(),
+                meta=PluginDeclaration.Meta(version="1.0.0", minimum_dify_version="999.0.0"),
+            ),
+        )
 
     @pytest.mark.parametrize(
         ("install", "install_args"),
@@ -495,7 +514,7 @@ class TestPluginCompatibilityAdmission:
         installer = mock_installer_cls.return_value
         incompatible = self._incompatible_decode_response()
         if cached:
-            installer.fetch_plugin_manifest.return_value = MagicMock()
+            installer.fetch_plugin_manifest.return_value = incompatible.manifest
             installer.decode_plugin_from_identifier.return_value = incompatible
         else:
             installer.fetch_plugin_manifest.side_effect = RuntimeError("not cached")
@@ -532,7 +551,7 @@ class TestPluginCompatibilityAdmission:
     ):
         mock_fs.get_plugin_installation_permission.return_value = _make_permission()
         installer = mock_installer_cls.return_value
-        installer.fetch_plugin_manifest.return_value = MagicMock()
+        installer.fetch_plugin_manifest.return_value = self._incompatible_decode_response().manifest
         installer.decode_plugin_from_identifier.return_value = self._incompatible_decode_response()
 
         with pytest.raises(PluginInstallationForbiddenError, match="requires Dify"):
