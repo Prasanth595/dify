@@ -138,6 +138,20 @@ describe('extractFunctionParams', () => {
     expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
   })
 
+  it.each(['if (enabled)', 'while (enabled)', 'for (;;)'])(
+    'recognizes a regex statement after a control condition in an arrow default (%s)',
+    (controlCondition) => {
+      const code = `function main({ matcher: matcher = () => { ${controlCondition} /[),]/.test(value); return true }, text }) { return { matcher, text } }`
+      expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
+    },
+  )
+
+  it('still treats division after a call containing control-keyword text as division', () => {
+    const code =
+      'function main({ ratio: ratio = lookup("if (enabled)") / denominator / 2, text }) { return { ratio, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['ratio', 'text'])
+  })
+
   it('does not treat division after a postfix increment as a regex literal', () => {
     const code =
       'function main({ ratio: ratio = count++ / denominator / 2, text }) { return { ratio, text } }'

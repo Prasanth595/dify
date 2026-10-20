@@ -29,12 +29,19 @@ const canStartJavaScriptRegex = (code: string, start: number) => {
   ].includes(previousWord ?? '')
 }
 
-const getJavaScriptRegexLiteralEnd = (code: string, start: number) => {
+const isJavaScriptControlConditionOpen = (code: string, start: number) =>
+  /(?:^|[^\w$.])(?:if|while|for(?:\s+await)?|with)\s*$/.test(code.slice(0, start))
+
+const getJavaScriptRegexLiteralEnd = (
+  code: string,
+  start: number,
+  followsControlCondition = false,
+) => {
   if (
     code[start] !== '/' ||
     code[start + 1] === '/' ||
     code[start + 1] === '*' ||
-    !canStartJavaScriptRegex(code, start)
+    (!followsControlCondition && !canStartJavaScriptRegex(code, start))
   ) {
     return undefined
   }
@@ -68,6 +75,8 @@ const splitTopLevelParams = (rawParams: string, language: CodeLanguage) => {
   let nesting = 0
   let quote: string | undefined
   let escaped = false
+  const controlConditionParens: boolean[] = []
+  let followsControlCondition = false
 
   for (let i = 0; i < rawParams.length; i++) {
     const char = rawParams[i]!
@@ -84,10 +93,13 @@ const splitTopLevelParams = (rawParams: string, language: CodeLanguage) => {
       continue
     }
 
+    if (!/\s/.test(char) && char !== '/') followsControlCondition = false
+
     if (language === CodeLanguage.javascript && char === '/') {
-      const regexEnd = getJavaScriptRegexLiteralEnd(rawParams, i)
+      const regexEnd = getJavaScriptRegexLiteralEnd(rawParams, i, followsControlCondition)
       if (regexEnd !== undefined) {
         i = regexEnd - 1
+        followsControlCondition = false
         continue
       }
     }
@@ -102,8 +114,12 @@ const splitTopLevelParams = (rawParams: string, language: CodeLanguage) => {
     }
 
     if (char === '(' || char === '[' || char === '{') {
+      if (language === CodeLanguage.javascript && char === '(')
+        controlConditionParens.push(isJavaScriptControlConditionOpen(rawParams, i))
       nesting++
     } else if (char === ')' || char === ']' || char === '}') {
+      if (language === CodeLanguage.javascript && char === ')')
+        followsControlCondition = controlConditionParens.pop() ?? false
       nesting = Math.max(0, nesting - 1)
     } else if (char === ',' && nesting === 0) {
       params.push(rawParams.slice(start, i))
@@ -131,6 +147,8 @@ const getMainParams = (
   let nesting = 1
   let quote: string | undefined
   let escaped = false
+  const controlConditionParens: boolean[] = []
+  let followsControlCondition = false
 
   for (let i = start; i < code.length; i++) {
     const char = code[i]!
@@ -147,10 +165,13 @@ const getMainParams = (
       continue
     }
 
+    if (!/\s/.test(char) && char !== '/') followsControlCondition = false
+
     if (language === CodeLanguage.javascript && char === '/') {
-      const regexEnd = getJavaScriptRegexLiteralEnd(code, i)
+      const regexEnd = getJavaScriptRegexLiteralEnd(code, i, followsControlCondition)
       if (regexEnd !== undefined) {
         i = regexEnd - 1
+        followsControlCondition = false
         continue
       }
     }
@@ -162,9 +183,13 @@ const getMainParams = (
           : char
       i += quote.length - 1
     } else if (char === '(') {
+      if (language === CodeLanguage.javascript)
+        controlConditionParens.push(isJavaScriptControlConditionOpen(code, i))
       nesting++
-    } else if (char === ')' && --nesting === 0) {
-      return code.slice(start, i)
+    } else if (char === ')') {
+      if (language === CodeLanguage.javascript)
+        followsControlCondition = controlConditionParens.pop() ?? false
+      if (--nesting === 0) return code.slice(start, i)
     }
   }
 
