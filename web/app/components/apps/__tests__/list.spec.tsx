@@ -232,7 +232,7 @@ it('queries collaborators only for workflow apps when collaboration is enabled',
 })
 
 it('combines real creator and tag selections with URL filters for both catalogs', async () => {
-  const { user } = await setup('?keywords=sales&category=workflow')
+  const { user } = await setup('?keywords=sales&category=workflow&availability=unavailable')
   const scrollTo = vi.fn()
   catalog().scrollTo = scrollTo
   await user.click(screen.getByRole('combobox', { name: 'app.studio.filters.creators' }))
@@ -246,6 +246,7 @@ it('combines real creator and tag selections with URL filters for both catalogs'
     tag_ids: ['tag-1'],
     creator_ids: ['creator-1'],
     mode: 'workflow',
+    availability: 'unavailable',
   }
   await waitFor(() =>
     expect(api.apps).toHaveBeenLastCalledWith({ query: { ...filters, limit: 30 } }),
@@ -341,6 +342,59 @@ it('ignores unsupported categories from the URL', async () => {
 })
 
 it.each([
+  ['available', 'app.studio.availability.available', 'available'],
+  ['unavailable', 'app.studio.availability.unavailable', 'unavailable'],
+  ['invalid', 'app.studio.availability.all', undefined],
+])('restores and validates availability from the URL: %s', async (value, label, expected) => {
+  await setup(`?availability=${value}`)
+  expect(
+    screen.getByRole('combobox', { name: 'app.studio.availability.status' }),
+  ).toHaveTextContent(label)
+  expect(api.apps.mock.calls.at(-1)?.[0]?.query?.availability).toBe(expected)
+  expect(api.starred.mock.calls.at(-1)?.[0]?.query?.availability).toBe(expected)
+})
+
+it('changes availability for both catalogs without losing URL filters and resets scrolling', async () => {
+  const { user, onUrlUpdate } = await setup('?category=workflow&keywords=sales')
+  const scrollTo = vi.fn()
+  catalog().scrollTo = scrollTo
+  await user.click(screen.getByRole('combobox', { name: 'app.studio.availability.status' }))
+  await user.click(screen.getByRole('option', { name: 'app.studio.availability.unavailable' }))
+  const filters = {
+    page: 1,
+    name: 'sales',
+    mode: 'workflow',
+    sort_by: 'last_modified',
+    availability: 'unavailable',
+  }
+  await waitFor(() =>
+    expect(api.apps).toHaveBeenLastCalledWith({ query: { ...filters, limit: 30 } }),
+  )
+  expect(api.starred).toHaveBeenLastCalledWith({ query: { ...filters, limit: 100 } })
+  await waitFor(() => {
+    const params = onUrlUpdate.mock.calls.at(-1)?.[0].searchParams
+    expect(params?.get('category')).toBe('workflow')
+    expect(params?.get('keywords')).toBe('sales')
+    expect(params?.get('availability')).toBe('unavailable')
+  })
+  expect(scrollTo).toHaveBeenCalledWith({ top: 0 })
+  await user.click(screen.getByRole('combobox', { name: 'app.studio.availability.status' }))
+  await user.click(screen.getByRole('option', { name: 'app.studio.availability.all' }))
+  await waitFor(() =>
+    expect(onUrlUpdate.mock.calls.at(-1)?.[0].searchParams.has('availability')).toBe(false),
+  )
+  expect(api.apps.mock.calls.at(-1)?.[0]?.query).not.toHaveProperty('availability')
+  expect(api.starred.mock.calls.at(-1)?.[0]?.query).not.toHaveProperty('availability')
+})
+
+it('shows filtered empty results rather than workspace creation guidance', async () => {
+  api.apps.mockResolvedValue(page([]))
+  await setup('?availability=unavailable')
+  expect(emptyStatus()).toHaveTextContent('app.filterEmpty.noApps')
+  expect(screen.queryByText('app.firstEmpty.title')).not.toBeInTheDocument()
+})
+
+it.each([
   ['earliest_created', 'earliest_created', 'app.studio.sort.earliestCreated'],
   ['invalid', 'last_modified', 'app.studio.sort.lastModified'],
 ])('resolves URL sort %s for the control and query', async (value, expected, label) => {
@@ -420,7 +474,7 @@ it('opens real tag management from the list filter', async () => {
 it('does not paginate repeatedly while a page is pending or after the last page', async () => {
   const next = createDeferred<Awaited<ReturnType<typeof api.apps>>>()
   api.apps.mockResolvedValueOnce(page(apps, 1, true)).mockReturnValue(next.promise)
-  await setup()
+  await setup('?availability=unavailable')
   intersect(false)
   expect(api.apps).toHaveBeenCalledTimes(1)
   intersect()
@@ -430,7 +484,9 @@ it('does not paginate repeatedly while a page is pending or after the last page'
   await act(async () => next.resolve(page([app({ id: 'app-3', name: 'Third app' })], 2)))
   expect(await screen.findByRole('link', { name: 'Third app' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Chat app' })).toBeInTheDocument()
-  expect(api.apps).toHaveBeenLastCalledWith({ query: expect.objectContaining({ page: 2 }) })
+  expect(api.apps).toHaveBeenLastCalledWith({
+    query: expect.objectContaining({ page: 2, availability: 'unavailable' }),
+  })
   intersect()
   expect(api.apps).toHaveBeenCalledTimes(2)
 })
