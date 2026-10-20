@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from queue import Empty, Queue
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +13,7 @@ from core.app.apps.workflow.stop_aware_ready_queue import (
 from graphon.engine.ready_queue import StartTask
 from graphon.runtime import RuntimeState, VariablePool
 from graphon.runtime.execution import GraphExecution
+from graphon.runtime.ready_queue import ReadyQueue
 
 
 def _start_task(node_id: str = "next-node") -> StartTask:
@@ -24,7 +26,7 @@ def _graph_execution(*, aborted: bool = False) -> GraphExecution:
 
 def test_ready_queue_accepts_work_while_run_is_active() -> None:
     inner = Queue()
-    queue = StopAwareReadyQueue(inner, task_id="task-1", graph_execution=_graph_execution())
+    queue = StopAwareReadyQueue(cast(ReadyQueue, inner), task_id="task-1", graph_execution=_graph_execution())
     task = _start_task()
 
     with patch(
@@ -39,7 +41,9 @@ def test_ready_queue_accepts_work_while_run_is_active() -> None:
 
 def test_ready_queue_rejects_next_node_after_graph_abort() -> None:
     inner = Queue()
-    queue = StopAwareReadyQueue(inner, task_id="task-1", graph_execution=_graph_execution(aborted=True))
+    queue = StopAwareReadyQueue(
+        cast(ReadyQueue, inner), task_id="task-1", graph_execution=_graph_execution(aborted=True)
+    )
 
     with patch(
         "core.app.apps.workflow.stop_aware_ready_queue.is_app_task_stop_flag_set",
@@ -52,7 +56,7 @@ def test_ready_queue_rejects_next_node_after_graph_abort() -> None:
 
 def test_ready_queue_rejects_next_node_when_stop_flag_is_set() -> None:
     inner = Queue()
-    queue = StopAwareReadyQueue(inner, task_id="task-1", graph_execution=_graph_execution())
+    queue = StopAwareReadyQueue(cast(ReadyQueue, inner), task_id="task-1", graph_execution=_graph_execution())
 
     with patch(
         "core.app.apps.workflow.stop_aware_ready_queue.is_app_task_stop_flag_set",
@@ -75,7 +79,7 @@ def test_ready_queue_drops_pending_work_after_stop(
     inner = Queue()
     inner.put(_start_task("already-queued-node"))
     queue = StopAwareReadyQueue(
-        inner,
+        cast(ReadyQueue, inner),
         task_id="task-1",
         graph_execution=_graph_execution(aborted=aborted),
     )
@@ -98,7 +102,7 @@ def test_attach_stop_aware_ready_queue_wraps_once() -> None:
     runtime_state = RuntimeState(
         variable_pool=VariablePool(),
         start_at=0,
-        ready_queue=inner,
+        ready_queue=cast(ReadyQueue, inner),
         graph_execution=_graph_execution(),
     )
 
