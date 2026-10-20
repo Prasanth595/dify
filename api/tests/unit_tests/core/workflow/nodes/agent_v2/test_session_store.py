@@ -427,17 +427,18 @@ def test_load_execution_refreshes_snapshot_between_visibility_retries(
     monkeypatch: pytest.MonkeyPatch,
     sqlite_session_factory: sessionmaker[Session],
 ) -> None:
-    sleep = MagicMock()
+    sleep_calls = 0
     rollbacks: list[Session] = []
 
     def make_caller_visible(_seconds: float) -> None:
-        if sleep.call_count == 1:
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls == 1:
             with sqlite_session_factory() as observer:
                 observer.add(_execution_row())
                 observer.commit()
 
-    sleep.side_effect = make_caller_visible
-    monkeypatch.setattr("core.workflow.nodes.agent_v2.session_store.time.sleep", sleep)
+    monkeypatch.setattr("core.workflow.nodes.agent_v2.session_store.time.sleep", make_caller_visible)
 
     with sqlite_session_factory() as session:
         event.listen(session, "after_rollback", lambda rolled_back_session: rollbacks.append(rolled_back_session))
@@ -453,7 +454,7 @@ def test_load_execution_refreshes_snapshot_between_visibility_retries(
 
     assert loaded.id == "execution-1"
     assert len(rollbacks) == 1
-    assert sleep.call_count == 1
+    assert sleep_calls == 1
 
 
 def test_save_snapshot_targets_binding(sqlite_session: Session) -> None:
