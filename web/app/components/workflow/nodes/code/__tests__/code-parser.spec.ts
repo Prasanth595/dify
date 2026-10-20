@@ -144,6 +144,18 @@ describe('extractFunctionParams', () => {
     expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
   })
 
+  it('recognizes a regex expression statement after else in a JavaScript default block', () => {
+    const code =
+      'function main({ matcher: matcher = () => { if (enabled) {} else /[),]/.test(value); return true }, text }) { return { matcher, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
+  })
+
+  it('recognizes a regex expression statement after a control block in a JavaScript default', () => {
+    const code =
+      'function main({ matcher: matcher = () => { if (enabled) {} /[),]/.test(value); return true }, text }) { return { matcher, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
+  })
+
   it.each(['if (enabled)', 'while (enabled)', 'for (;;)'])(
     'recognizes a regex statement after a control condition in an arrow default (%s)',
     (controlCondition) => {
