@@ -425,35 +425,35 @@ def test_load_existing_scope_waits_for_caller_row_to_become_visible(
 
 def test_load_execution_refreshes_snapshot_between_visibility_retries(
     monkeypatch: pytest.MonkeyPatch,
+    sqlite_session_factory: sessionmaker[Session],
 ) -> None:
-    execution = _execution_row()
-    caller_visible = False
-    session = MagicMock(spec=Session)
+    sleep = MagicMock()
+    rollbacks: list[Session] = []
 
-    def find_execution(_statement):
-        return execution if caller_visible else None
+    def make_caller_visible(_seconds: float) -> None:
+        if sleep.call_count == 1:
+            with sqlite_session_factory() as observer:
+                observer.add(_execution_row())
+                observer.commit()
 
-    def refresh_snapshot() -> None:
-        nonlocal caller_visible
-        caller_visible = True
+    sleep.side_effect = make_caller_visible
+    monkeypatch.setattr("core.workflow.nodes.agent_v2.session_store.time.sleep", sleep)
 
-    session.scalar.side_effect = find_execution
-    session.rollback.side_effect = refresh_snapshot
-    monkeypatch.setattr("core.workflow.nodes.agent_v2.session_store.time.sleep", lambda _seconds: None)
+    with sqlite_session_factory() as session:
+        event.listen(session, "after_rollback", lambda rolled_back_session: rollbacks.append(rolled_back_session))
+        loaded = WorkflowAgentWorkspaceStore._load_execution_by_identity(
+            session=session,
+            tenant_id="tenant-1",
+            app_id="app-1",
+            workflow_id="workflow-1",
+            workflow_run_id="run-1",
+            node_id="node-1",
+            node_execution_id="execution-1",
+        )
 
-    loaded = WorkflowAgentWorkspaceStore._load_execution_by_identity(
-        session=session,
-        tenant_id="tenant-1",
-        app_id="app-1",
-        workflow_id="workflow-1",
-        workflow_run_id="run-1",
-        node_id="node-1",
-        node_execution_id="execution-1",
-    )
-
-    assert loaded is execution
-    session.rollback.assert_called_once_with()
-    assert session.scalar.call_count == 2
+    assert loaded.id == "execution-1"
+    assert len(rollbacks) == 1
+    assert sleep.call_count == 1
 
 
 def test_save_snapshot_targets_binding(sqlite_session: Session) -> None:
