@@ -423,6 +423,39 @@ def test_load_existing_scope_waits_for_caller_row_to_become_visible(
     assert sleep.call_count == 2
 
 
+def test_load_execution_refreshes_snapshot_between_visibility_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    execution = _execution_row()
+    caller_visible = False
+    session = MagicMock(spec=Session)
+
+    def find_execution(_statement):
+        return execution if caller_visible else None
+
+    def refresh_snapshot() -> None:
+        nonlocal caller_visible
+        caller_visible = True
+
+    session.scalar.side_effect = find_execution
+    session.rollback.side_effect = refresh_snapshot
+    monkeypatch.setattr("core.workflow.nodes.agent_v2.session_store.time.sleep", lambda _seconds: None)
+
+    loaded = WorkflowAgentWorkspaceStore._load_execution_by_identity(
+        session=session,
+        tenant_id="tenant-1",
+        app_id="app-1",
+        workflow_id="workflow-1",
+        workflow_run_id="run-1",
+        node_id="node-1",
+        node_execution_id="execution-1",
+    )
+
+    assert loaded is execution
+    session.rollback.assert_called_once_with()
+    assert session.scalar.call_count == 2
+
+
 def test_save_snapshot_targets_binding(sqlite_session: Session) -> None:
     binding = _binding_row()
     sqlite_session.add_all([_workspace_row(), binding])
