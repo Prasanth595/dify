@@ -2,6 +2,66 @@ import type { OutputVar } from './types'
 import { VarType } from '../../types'
 import { CodeLanguage } from './types'
 
+const canStartJavaScriptRegex = (code: string, start: number) => {
+  let previous = start - 1
+  while (previous >= 0 && /\s/.test(code[previous]!)) previous--
+  if (previous < 0) return true
+
+  const previousChar = code[previous]!
+  if ((previousChar === '+' || previousChar === '-') && code[previous - 1] === previousChar)
+    return false
+  if ('([{,;:=!?&|+-*%^~</'.includes(previousChar)) return true
+  if (previousChar === '>' && code[previous - 1] === '=') return true
+
+  const previousWord = code.slice(0, previous + 1).match(/[\w$]+$/)?.[0]
+  return [
+    'await',
+    'case',
+    'delete',
+    'in',
+    'instanceof',
+    'of',
+    'return',
+    'throw',
+    'typeof',
+    'void',
+    'yield',
+  ].includes(previousWord ?? '')
+}
+
+const getJavaScriptRegexLiteralEnd = (code: string, start: number) => {
+  if (
+    code[start] !== '/' ||
+    code[start + 1] === '/' ||
+    code[start + 1] === '*' ||
+    !canStartJavaScriptRegex(code, start)
+  ) {
+    return undefined
+  }
+
+  let inCharacterClass = false
+  let escaped = false
+  for (let i = start + 1; i < code.length; i++) {
+    const char = code[i]!
+    if (char === '\n' || char === '\r') return undefined
+    if (escaped) {
+      escaped = false
+    } else if (char === '\\') {
+      escaped = true
+    } else if (char === '[') {
+      inCharacterClass = true
+    } else if (char === ']' && inCharacterClass) {
+      inCharacterClass = false
+    } else if (char === '/' && !inCharacterClass) {
+      let end = i + 1
+      while (/[a-z]/i.test(code[end] ?? '')) end++
+      return end
+    }
+  }
+
+  return undefined
+}
+
 const splitTopLevelParams = (rawParams: string, language: CodeLanguage) => {
   const params: string[] = []
   let start = 0
@@ -22,6 +82,14 @@ const splitTopLevelParams = (rawParams: string, language: CodeLanguage) => {
         quote = undefined
       }
       continue
+    }
+
+    if (language === CodeLanguage.javascript && char === '/') {
+      const regexEnd = getJavaScriptRegexLiteralEnd(rawParams, i)
+      if (regexEnd !== undefined) {
+        i = regexEnd - 1
+        continue
+      }
     }
 
     if (char === '"' || char === "'" || (language === CodeLanguage.javascript && char === '`')) {
@@ -77,6 +145,14 @@ const getMainParams = (
         quote = undefined
       }
       continue
+    }
+
+    if (language === CodeLanguage.javascript && char === '/') {
+      const regexEnd = getJavaScriptRegexLiteralEnd(code, i)
+      if (regexEnd !== undefined) {
+        i = regexEnd - 1
+        continue
+      }
     }
 
     if (char === '"' || char === "'" || (language === CodeLanguage.javascript && char === '`')) {

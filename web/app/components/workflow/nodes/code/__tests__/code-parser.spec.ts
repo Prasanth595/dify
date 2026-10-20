@@ -109,6 +109,35 @@ describe('extractFunctionParams', () => {
     },
   )
 
+  it.each([
+    ['parentheses', '/[(]/'],
+    ['character-class delimiters', '/[,(]/g'],
+    ['escaped slashes and groups', String.raw`/https?:\/\/(docs|api)\.example\.com/`],
+  ])(
+    'splits JavaScript parameters outside regex literals with %s',
+    (_description, defaultValue) => {
+      const code = `function main({ pattern: pattern = ${defaultValue}, text }) { return { text } }`
+      expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['pattern', 'text'])
+    },
+  )
+
+  it('still splits JavaScript parameters after division defaults', () => {
+    const code = 'function main({ ratio: ratio = total / count, text }) { return { ratio, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['ratio', 'text'])
+  })
+
+  it('recognizes a regex literal on the right side of division', () => {
+    const code =
+      'function main({ value: value = input / /[,(]/.source, text }) { return { value, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['value', 'text'])
+  })
+
+  it('does not treat division after a postfix increment as a regex literal', () => {
+    const code =
+      'function main({ ratio: ratio = count++ / denominator / 2, text }) { return { ratio, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['ratio', 'text'])
+  })
+
   it('splits JavaScript parameters outside template strings', () => {
     const code = 'function main({ label: label = `one,two`, count }) { return { label } }'
     expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['label', 'count'])
