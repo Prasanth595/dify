@@ -132,6 +132,12 @@ describe('extractFunctionParams', () => {
     expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['value', 'text'])
   })
 
+  it('recognizes a regex literal after an arrow function default', () => {
+    const code =
+      'function main({ matcher: matcher = () => /[,(]/, text }) { return { matcher, text } }'
+    expect(extractFunctionParams(code, CodeLanguage.javascript)).toEqual(['matcher', 'text'])
+  })
+
   it('does not treat division after a postfix increment as a regex literal', () => {
     const code =
       'function main({ ratio: ratio = count++ / denominator / 2, text }) { return { ratio, text } }'
