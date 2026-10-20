@@ -13,7 +13,7 @@ def test_load_stream_closes_response_body_when_consumer_stops_early() -> None:
     storage = TencentCosStorage.__new__(TencentCosStorage)
     storage.bucket_name = "test-bucket"
     storage.client = _cos_client()
-    storage.client.get_object = lambda Bucket, Key, KeySimplifyCheck=True, **kwargs: {"Body": body}  # noqa: N803, ARG005
+    storage.client.__dict__["get_object"] = lambda Bucket, Key, KeySimplifyCheck=True, **kwargs: {"Body": body}  # noqa: N803, ARG005
 
     stream = storage.load_stream("key")
     assert next(stream) == b"x" * 4096
@@ -27,7 +27,7 @@ def test_load_once_closes_response_body() -> None:
     storage = TencentCosStorage.__new__(TencentCosStorage)
     storage.bucket_name = "test-bucket"
     storage.client = _cos_client()
-    storage.client.get_object = lambda Bucket, Key, KeySimplifyCheck=True, **kwargs: {"Body": body}  # noqa: N803, ARG005
+    storage.client.__dict__["get_object"] = lambda Bucket, Key, KeySimplifyCheck=True, **kwargs: {"Body": body}  # noqa: N803, ARG005
 
     assert storage.load_once("key") == b"payload"
 

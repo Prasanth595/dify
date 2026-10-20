@@ -148,14 +148,14 @@ def _aliyun_client(body: GetObjectResult) -> oss2.Bucket:
     client = oss2.Bucket(
         oss2.Auth("test-access-key", "test-secret-key"), "https://oss-cn-hangzhou.aliyuncs.com", "test-bucket"
     )
-    client.get_object = lambda key: body  # noqa: ARG005
+    client.__dict__["get_object"] = lambda key: body  # noqa: ARG005
     return client
 
 
 def _baidu_body(payload: bytes) -> tuple[HTTPResponse, BceResponse]:
     raw = _http_response(payload)
     response = BceResponse()
-    response.data = raw
+    response.__dict__["data"] = raw
     return raw, response
 
 
@@ -165,13 +165,13 @@ def _baidu_client(body: BceResponse) -> BosClient:
         endpoint="https://bj.bcebos.com",
     )
     client = BosClient(config=config)
-    client.get_object = lambda bucket_name, key: body  # noqa: ARG005
+    client.__dict__["get_object"] = lambda bucket_name, key: body  # noqa: ARG005
     return client
 
 
 def _volcengine_body(payload: bytes) -> tuple[HTTPResponse, GetObjectOutput]:
     raw = _http_response(payload)
-    raw.request_id = "test-request-id"
+    raw.__dict__["request_id"] = "test-request-id"
     return raw, GetObjectOutput(raw)
 
 
@@ -182,7 +182,7 @@ def _volcengine_client(body: GetObjectOutput) -> tos.TosClientV2:
         endpoint="https://tos-cn-beijing.volces.com",
         region="cn-beijing",
     )
-    client.get_object = lambda bucket, key: body  # noqa: ARG005
+    client.__dict__["get_object"] = lambda bucket, key: body  # noqa: ARG005
     return client
 
 
@@ -198,5 +198,5 @@ def _huawei_client(body: GetResult) -> ObsClient:
         secret_access_key="test-secret-key",
         server="https://obs.cn-north-4.myhuaweicloud.com",
     )
-    client.getObject = lambda bucketName, objectKey: body  # noqa: N803, ARG005
+    client.__dict__["getObject"] = lambda bucketName, objectKey: body  # noqa: N803, ARG005
     return client
