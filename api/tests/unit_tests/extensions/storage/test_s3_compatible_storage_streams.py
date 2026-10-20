@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 from io import BytesIO
-from unittest.mock import MagicMock
 
+import boto3
 import pytest
 from botocore.response import StreamingBody
 
@@ -15,8 +15,8 @@ def test_load_once_closes_response_body(storage_type: type[AwsS3Storage] | type[
     body = StreamingBody(raw, len(b"payload"))
     storage = storage_type.__new__(storage_type)
     storage.bucket_name = "test-bucket"
-    storage.client = MagicMock()
-    storage.client.get_object.return_value = {"Body": body}
+    storage.client = _s3_client()
+    storage.client.get_object = lambda **_: {"Body": body}
 
     assert storage.load_once("key") == b"payload"
 
@@ -32,8 +32,8 @@ def test_load_stream_closes_response_body(
     body = StreamingBody(raw, 2048)
     storage = storage_type.__new__(storage_type)
     storage.bucket_name = "test-bucket"
-    storage.client = MagicMock()
-    storage.client.get_object.return_value = {"Body": body}
+    storage.client = _s3_client()
+    storage.client.get_object = lambda **_: {"Body": body}
 
     stream = storage.load_stream("key")
     if close_early:
@@ -62,8 +62,8 @@ def test_load_stream_closes_response_body_when_iteration_fails(
     body = FailingBody()
     storage = storage_type.__new__(storage_type)
     storage.bucket_name = "test-bucket"
-    storage.client = MagicMock()
-    storage.client.get_object.return_value = {"Body": body}
+    storage.client = _s3_client()
+    storage.client.get_object = lambda **_: {"Body": body}
 
     stream = storage.load_stream("key")
     assert next(stream) == b"first chunk"
@@ -72,3 +72,12 @@ def test_load_stream_closes_response_body_when_iteration_fails(
         next(stream)
 
     assert body.closed
+
+
+def _s3_client():
+    return boto3.client(
+        "s3",
+        region_name="us-east-1",
+        aws_access_key_id="test-access-key",
+        aws_secret_access_key="test-secret-key",
+    )

@@ -1,7 +1,7 @@
 from io import BytesIO
-from unittest.mock import MagicMock
 
 import requests
+from qcloud_cos import CosConfig, CosS3Client
 from qcloud_cos.cos_client import StreamBody
 from urllib3.response import HTTPResponse
 
@@ -12,8 +12,8 @@ def test_load_stream_closes_response_body_when_consumer_stops_early() -> None:
     raw, body = _stream_body(b"x" * 8192)
     storage = TencentCosStorage.__new__(TencentCosStorage)
     storage.bucket_name = "test-bucket"
-    storage.client = MagicMock()
-    storage.client.get_object.return_value = {"Body": body}
+    storage.client = _cos_client()
+    storage.client.get_object = lambda **_: {"Body": body}
 
     stream = storage.load_stream("key")
     assert next(stream) == b"x" * 4096
@@ -26,8 +26,8 @@ def test_load_once_closes_response_body() -> None:
     raw, body = _stream_body(b"payload")
     storage = TencentCosStorage.__new__(TencentCosStorage)
     storage.bucket_name = "test-bucket"
-    storage.client = MagicMock()
-    storage.client.get_object.return_value = {"Body": body}
+    storage.client = _cos_client()
+    storage.client.get_object = lambda **_: {"Body": body}
 
     assert storage.load_once("key") == b"payload"
 
@@ -42,3 +42,8 @@ def _stream_body(payload: bytes) -> tuple[HTTPResponse, StreamBody]:
     http_response.raw = raw
     body = StreamBody(http_response)
     return raw, body
+
+
+def _cos_client() -> CosS3Client:
+    config = CosConfig(Region="ap-guangzhou", SecretId="test-secret-id", SecretKey="test-secret-key")
+    return CosS3Client(config)
