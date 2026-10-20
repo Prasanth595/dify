@@ -1,5 +1,6 @@
 """Unit coverage for Dify's in-memory ResponseStreamFilter boundary behavior."""
 
+from core.workflow.system_variables import default_system_variables
 from core.workflow.workflow_entry import (
     _SkippedEdgeAwareResponseStreamFilter,
     iter_dify_graph_engine_events,
@@ -93,7 +94,7 @@ def test_dify_response_stream_filter_handles_issue_170_shape() -> None:
 
 def test_skipped_edge_unblocks_response_stream_without_rewriting_event() -> None:
     graph_runtime_state = RuntimeState(
-        variable_pool=VariablePool.from_bootstrap(system_variables={}, user_inputs={}),
+        variable_pool=VariablePool.from_bootstrap(system_variables=default_system_variables(), user_inputs={}),
         start_at=0.0,
         workflow_id="workflow-id",
     )
