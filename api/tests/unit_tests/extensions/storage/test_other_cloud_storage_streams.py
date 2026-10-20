@@ -36,6 +36,26 @@ def test_aliyun_load_stream_closes_response_body_when_consumer_stops_early() -> 
     assert raw.closed
 
 
+def test_aliyun_load_stream_closes_response_body_when_read_fails() -> None:
+    raw, body = _aliyun_body(b"x" * 8192)
+
+    class FailingBody(GetObjectResult):
+        @override
+        def read(self, amt: int | None = None) -> bytes:
+            raise OSError("stream read failed")
+
+    failing_body = FailingBody(body.resp)
+    storage = AliyunOssStorage.__new__(AliyunOssStorage)
+    storage.folder = ""
+    storage.client = _aliyun_client(failing_body)
+
+    stream = storage.load_stream("key")
+    with pytest.raises(OSError, match="stream read failed"):
+        next(stream)
+
+    assert raw.closed
+
+
 def test_aliyun_load_once_closes_response_body_when_read_fails() -> None:
     raw, body = _aliyun_body(b"payload")
 
@@ -124,6 +144,24 @@ def test_volcengine_load_stream_closes_response_body_when_consumer_stops_early()
     stream = storage.load_stream("key")
     assert next(stream) == b"x" * 4096
     stream.close()
+
+    assert raw.closed
+
+
+def test_volcengine_load_stream_closes_response_body_when_read_fails() -> None:
+    raw, body = _volcengine_body(b"x" * 8192)
+
+    def fail_read(_amt: int | None = None) -> bytes:
+        raise OSError("stream read failed")
+
+    body.__dict__["read"] = fail_read
+    storage = VolcengineTosStorage.__new__(VolcengineTosStorage)
+    storage.bucket_name = "test-bucket"
+    storage.client = _volcengine_client(body)
+
+    stream = storage.load_stream("key")
+    with pytest.raises(OSError, match="stream read failed"):
+        next(stream)
 
     assert raw.closed
 
